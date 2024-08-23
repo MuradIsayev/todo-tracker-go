@@ -9,6 +9,7 @@ TODO: Improve display of tasks
 import (
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"regexp"
@@ -86,7 +87,7 @@ func findTaskById(tasks []Task, id int) (int, *Task, error) {
 	return -1, nil, fmt.Errorf("task with ID=%d not found", id)
 }
 
-func updateTaskStatus(id, taskStatus string) error {
+func updateTaskStatus(id string, taskStatus TaskStatus) error {
 	var numberRegex = regexp.MustCompile(`^[0-9]+$`)
 
 	if !numberRegex.MatchString(id) {
@@ -95,7 +96,7 @@ func updateTaskStatus(id, taskStatus string) error {
 
 	taskId, err := strconv.Atoi(id)
 	if err != nil {
-		return fmt.Errorf("ID must only contain digits: %v", err)
+		return fmt.Errorf("Failed to convert string to integer: %v", err)
 	}
 
 	tasks, err := readTasksFromFile()
@@ -105,17 +106,7 @@ func updateTaskStatus(id, taskStatus string) error {
 		return err
 	}
 
-	switch taskStatus {
-	case MARK_TO_DO:
-		task.Status = TODO
-	case MARK_IN_PROGRESS:
-		task.Status = IN_PROGRESS
-	case MARK_DONE:
-		task.Status = DONE
-	default:
-		return errors.New("Invalid status")
-	}
-
+	task.Status = taskStatus
 	tasks[index] = *task
 
 	err = writeTasksToFile(tasks)
@@ -136,7 +127,7 @@ func updateTaskTitle(id, title string) error {
 
 	taskId, err := strconv.Atoi(id)
 	if err != nil {
-		return fmt.Errorf("ID must only contain digits: %v", err)
+		return fmt.Errorf("Failed to convert string to integer: %v", err)
 	}
 
 	tasks, err := readTasksFromFile()
@@ -175,7 +166,7 @@ func deleteTask(id string) error {
 
 	taskId, err := strconv.Atoi(id)
 	if err != nil {
-		return fmt.Errorf("ID must only contain digits: %v", err)
+		return fmt.Errorf("Failed to convert string to integer: %v", err)
 	}
 
 	index, _, err := findTaskById(tasks, taskId)
@@ -204,59 +195,103 @@ func writeTasksToFile(tasks []Task) error {
 	return nil
 }
 
-func listTasks() error {
+func listTasks(statusFilter TaskStatus) error {
 	tasks, err := readTasksFromFile()
 	if err != nil {
 		return err
 	}
 
 	for _, task := range tasks {
-		fmt.Printf("ID: %d | Title: %s | Status: %s | CreatedAt: %s\n", task.Id, task.Title, task.Status, task.CreatedAt)
+		if statusFilter == -1 || task.Status == statusFilter {
+			fmt.Printf("ID: %d | Title: %s | Status: %s | CreatedAt: %s\n", task.Id, task.Title, task.Status, task.CreatedAt)
+		}
 	}
 
 	return nil
 }
 
 func main() {
-	actionCommand := os.Args[1]
+	listCommand := flag.NewFlagSet("list", flag.ExitOnError)
+	listDone := listCommand.Bool("done", false, "List tasks with status DONE")
+	listInProgress := listCommand.Bool("in-progress", false, "List tasks with status IN_PROGRESS")
+	listTodo := listCommand.Bool("todo", false, "List tasks with status TODO")
 
-	switch actionCommand {
-	case ADD:
-		if len(os.Args) != 3 {
-			fmt.Println("USAGE: add \"task to do\"")
-			return
+	addCommand := flag.NewFlagSet("add", flag.ExitOnError)
+	updateCommand := flag.NewFlagSet("update", flag.ExitOnError)
+	deleteCommand := flag.NewFlagSet("delete", flag.ExitOnError)
+
+	markCommand := flag.NewFlagSet("mark", flag.ExitOnError)
+	markDone := markCommand.Bool("done", false, "Mark task with status DONE")
+	markInProgress := markCommand.Bool("in-progress", false, "Mark task with status IN_PROGRESS")
+	markTodo := markCommand.Bool("todo", false, "Mark task with status TODO")
+
+	switch os.Args[1] {
+	case "add":
+		addCommand.Parse(os.Args[2:])
+		if addCommand.Parsed() {
+			if len(addCommand.Args()) != 1 {
+				fmt.Println("USAGE: add \"task title\"")
+				return
+			}
+			createTask(addCommand.Args()[0])
 		}
-		createTask(os.Args[2])
-	case LIST:
-		listTasks()
-
-	case MARK_DONE, MARK_TO_DO, MARK_IN_PROGRESS:
-		if len(os.Args) != 3 {
-			fmt.Println("USAGE: mark-to-do | mark-in-progress | mark-done 1")
-			return
+	case "list":
+		listCommand.Parse(os.Args[2:])
+		if listCommand.Parsed() {
+			var statusFilter TaskStatus
+			switch {
+			case *listDone:
+				statusFilter = DONE
+			case *listInProgress:
+				statusFilter = IN_PROGRESS
+			case *listTodo:
+				statusFilter = TODO
+			default:
+				statusFilter = -1
+			}
+			listTasks(statusFilter)
 		}
-		taskId := os.Args[2]
-		taskStatus := os.Args[1]
-		updateTaskStatus(taskId, taskStatus)
-
-	case UPDATE:
-		if len(os.Args) != 4 {
-			fmt.Println("USAGE: update 1 \"new title for 1st task\"")
-			return
+	case "update":
+		updateCommand.Parse(os.Args[2:])
+		if updateCommand.Parsed() {
+			if len(updateCommand.Args()) != 2 {
+				fmt.Println("USAGE: update <task ID> \"task title\"")
+				return
+			}
+			updateTaskTitle(updateCommand.Args()[0], updateCommand.Args()[1])
 		}
-
-		taskId := os.Args[2]
-		taskTitle := os.Args[3]
-		updateTaskTitle(taskId, taskTitle)
-
-	case DELETE:
-		if len(os.Args) != 3 {
-			fmt.Println("USAGE: delete 1")
-			return
+	case "delete":
+		deleteCommand.Parse(os.Args[2:])
+		if deleteCommand.Parsed() {
+			if len(deleteCommand.Args()) != 1 {
+				fmt.Println("USAGE: delete <task ID>")
+				return
+			}
+			deleteTask(deleteCommand.Args()[0])
 		}
-		taskId := os.Args[2]
-		deleteTask(taskId)
+	case "mark":
+		markCommand.Parse(os.Args[2:])
+		if markCommand.Parsed() {
+			if len(markCommand.Args()) != 1 {
+				fmt.Println("USAGE: mark --done | --in-progress | --todo <task ID>")
+				return
+			}
+			var taskStatus TaskStatus
+			switch {
+			case *markDone:
+				taskStatus = DONE
+			case *markInProgress:
+				taskStatus = IN_PROGRESS
+			case *markTodo:
+				taskStatus = TODO
+			default:
+				fmt.Println("Please specify a valid status with --done, --in-progress, or --todo")
+				return
+			}
+			updateTaskStatus(markCommand.Args()[0], taskStatus)
+		}
 	default:
-		fmt.Println("Expected 'add', 'list', 'update', 'delete', 'mark-to-do | mark-in-progress | mark-done' commands")
+		fmt.Println("Expected 'add', 'list', 'update', 'delete', or 'mark' commands")
+		os.Exit(1)
 	}
 }
