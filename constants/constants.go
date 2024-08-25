@@ -1,4 +1,4 @@
-package main
+package constants
 
 const (
 	ADD    string = "add"
