@@ -8,6 +8,9 @@ import (
 	"regexp"
 	"strconv"
 	"time"
+
+	"github.com/MuradIsayev/todo-tracker/constants"
+	"github.com/olekukonko/tablewriter"
 )
 
 type TaskStatus int
@@ -28,10 +31,14 @@ const (
 
 type TaskService struct {
 	filePath string
+	table    *tablewriter.Table
 }
 
-func NewTaskService(filePath string) *TaskService {
-	return &TaskService{filePath: filePath}
+func NewTaskService(filePath string, table *tablewriter.Table) *TaskService {
+	return &TaskService{
+		filePath: filePath,
+		table:    table,
+	}
 }
 
 func (ts TaskStatus) String() string {
@@ -180,19 +187,53 @@ func (s *TaskService) DeleteTask(id string) error {
 	return s.writeTasksToFile(tasks)
 }
 
+func (s *TaskService) DeleteAllTasks() error {
+	var tasks []Task
+
+	return s.writeTasksToFile(tasks)
+}
+
+func defineFooterText(nbOfLeftTasks, nbOfTotalTasks int) string {
+	if nbOfLeftTasks == 0 && nbOfTotalTasks == 0 {
+		return "No tasks found"
+	}
+
+	return fmt.Sprintf("Left tasks: %d", nbOfLeftTasks)
+}
+
 func (s *TaskService) ListTasks(statusFilter TaskStatus) error {
 	tasks, err := s.readTasksFromFile()
 	if err != nil {
 		return err
 	}
 
+	var nbOfLeftTasks int
+
 	for _, task := range tasks {
 		if statusFilter == -1 || task.Status == statusFilter {
-			createdAt := task.CreatedAt.Format("15:04:05 (Mon) - 02/01/2006")
-			updatedAt := task.UpdatedAt.Format("15:04:05 (Mon) - 02/01/2006")
-			fmt.Printf("ID: %d | Title: %s | Status: %s | CreatedAt: %s | UpdatedAt: %s\n", task.Id, task.Title, task.Status, createdAt, updatedAt)
+			createdAt := task.CreatedAt.Format(constants.DATE_FORMAT)
+			updatedAt := task.UpdatedAt.Format(constants.DATE_FORMAT)
+			s.table.Append([]string{strconv.Itoa(task.Id), task.Title, task.Status.String(), createdAt, updatedAt})
+
+			if task.Status == TODO {
+				nbOfLeftTasks++
+			}
 		}
 	}
+
+	s.table.SetRowLine(true)
+	s.table.SetFooter([]string{"", "", "", " ", defineFooterText(nbOfLeftTasks, len(tasks))})
+	s.table.SetHeaderColor(tablewriter.Colors{tablewriter.Bold},
+		tablewriter.Colors{tablewriter.Bold},
+		tablewriter.Colors{tablewriter.Bold},
+		tablewriter.Colors{tablewriter.Bold},
+		tablewriter.Colors{tablewriter.Bold},
+	)
+
+	s.table.SetFooterColor(tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold})
+	// s.table.SetCaption(true, "Tasks List")
+
+	s.table.Render()
 
 	return nil
 }

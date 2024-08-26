@@ -1,11 +1,7 @@
 package main
 
 /*
-TODO: Improve display of tasks (use libraries like tablewriter to beautify visualization)
-TODO: Reduce repetition of code and improve code quality (separation of concerns and DRY principle)
-TODO: Display date in a more readable format (e.g., "2021-09-01T12:00:00Z" -> "2021-09-01 12:00:00")
 TODO: Add more features like sorting tasks by date, filtering tasks by date range, etc.
-TODO: Understand what the code does and how it works
 TODO: Maybee add unit tests?
 */
 
@@ -16,10 +12,14 @@ import (
 
 	"github.com/MuradIsayev/todo-tracker/constants"
 	"github.com/MuradIsayev/todo-tracker/task"
+	"github.com/olekukonko/tablewriter"
 )
 
 func main() {
-	taskService := task.NewTaskService(constants.DB_FILE)
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetHeader([]string{"ID", "Title", "Status", "Create Date", "Update Date"})
+
+	taskService := task.NewTaskService(constants.DB_FILE, table)
 
 	// Commands
 	listCommand := flag.NewFlagSet(constants.LIST, flag.ExitOnError)
@@ -37,6 +37,9 @@ func main() {
 	markDone := markCommand.Bool("done", false, "Mark task with status DONE")
 	markInProgress := markCommand.Bool("in-progress", false, "Mark task with status IN_PROGRESS")
 	markTodo := markCommand.Bool("todo", false, "Mark task with status TODO")
+
+	// Flags for delete command
+	deleteAll := deleteCommand.Bool("all", false, "Delete all tasks")
 
 	if len(os.Args) < 2 {
 		fmt.Println("Expected 'add', 'list', 'update', 'delete', or 'mark' commands")
@@ -87,13 +90,21 @@ func main() {
 	case constants.DELETE:
 		deleteCommand.Parse(os.Args[2:])
 		if deleteCommand.Parsed() {
-			if len(deleteCommand.Args()) != 1 {
-				fmt.Println("USAGE: delete <task_id>")
+			if len(deleteCommand.Args()) != 1 && !*deleteAll {
+				fmt.Println("USAGE: delete <task_id> | --all")
 				return
 			}
-			if err := taskService.DeleteTask(deleteCommand.Args()[0]); err != nil {
-				fmt.Println("Error:", err)
+
+			if *deleteAll {
+				if err := taskService.DeleteAllTasks(); err != nil {
+					fmt.Println("Error:", err)
+				}
+			} else {
+				if err := taskService.DeleteTask(deleteCommand.Args()[0]); err != nil {
+					fmt.Println("Error:", err)
+				}
 			}
+
 		}
 	case constants.MARK:
 		markCommand.Parse(os.Args[2:])
