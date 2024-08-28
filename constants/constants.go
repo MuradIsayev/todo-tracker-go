@@ -8,5 +8,7 @@ const (
 	MARK   string = "mark"
 )
 
-const DB_FILE = "task.json"
+const TASK_FILE_NAME = "task.json"
+const PROJECT_FILE_NAME = "project.json"
+
 const DATE_FORMAT = "2006-01-02 15:04:05"

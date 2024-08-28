@@ -15,6 +15,12 @@ import (
 
 type TaskStatus int
 
+const (
+	TODO TaskStatus = iota
+	IN_PROGRESS
+	DONE
+)
+
 type Task struct {
 	Id        int        `json:"id"`
 	Title     string     `json:"title"`
@@ -23,26 +29,23 @@ type Task struct {
 	UpdatedAt time.Time  `json:"updatedAt"`
 }
 
-const (
-	TODO TaskStatus = iota
-	IN_PROGRESS
-	DONE
-)
-
 type TaskService struct {
 	filePath string
 	table    *tablewriter.Table
 }
 
-func NewTaskService(filePath string, table *tablewriter.Table) *TaskService {
+func NewTaskService(id string, table *tablewriter.Table) *TaskService {
+	filePath := fmt.Sprintf("%s_%s", id, constants.TASK_FILE_NAME)
+	table.SetHeader([]string{"ID", "Title", "Status", "Create Date", "Update Date"})
+
 	return &TaskService{
 		filePath: filePath,
 		table:    table,
 	}
 }
 
-func (ts TaskStatus) String() string {
-	switch ts {
+func (taskStatus TaskStatus) String() string {
+	switch taskStatus {
 	case TODO:
 		return "TODO"
 	case IN_PROGRESS:
@@ -82,13 +85,6 @@ func (s *TaskService) writeTasksToFile(tasks []Task) error {
 		return fmt.Errorf("cannot write to file: %v", err)
 	}
 	return nil
-}
-
-func getNextID(tasks []Task) int {
-	if len(tasks) == 0 {
-		return 1
-	}
-	return tasks[len(tasks)-1].Id + 1
 }
 
 func (s *TaskService) getNextID(tasks []Task) int {
@@ -156,10 +152,8 @@ func (s *TaskService) UpdateTaskTitle(id, title string) error {
 	}
 
 	if title != "" {
-		fmt.Println("Title is empty", task.UpdatedAt)
 		task.Title = title
 		task.UpdatedAt = time.Now()
-		fmt.Println("2 Title is empty", task.UpdatedAt)
 		tasks[index] = *task
 	}
 
@@ -229,7 +223,6 @@ func (s *TaskService) ListTasks(statusFilter TaskStatus) error {
 		tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
 	)
-
 	s.table.SetFooterColor(tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold})
 	// s.table.SetCaption(true, "Tasks List")
 
