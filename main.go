@@ -24,11 +24,15 @@ func startREPL(id string) {
 
 	taskTable := tablewriter.NewWriter(os.Stdout)
 	taskService := task.NewTaskService(id, taskTable)
+	taskTable.SetHeader([]string{"ID", "Title", "Status", "Create Date", "Update Date"})
+
 	listCommand := flag.NewFlagSet(constants.LIST, flag.ExitOnError)
 	addCommand := flag.NewFlagSet(constants.ADD, flag.ExitOnError)
 	updateCommand := flag.NewFlagSet(constants.UPDATE, flag.ExitOnError)
 	deleteCommand := flag.NewFlagSet(constants.DELETE, flag.ExitOnError)
 	markCommand := flag.NewFlagSet(constants.MARK, flag.ExitOnError)
+
+	deleteAll := deleteCommand.Bool("all", false, "Delete all projects")
 
 	// Flags for list command
 	listDone := listCommand.Bool("done", false, "List tasks with status DONE")
@@ -36,9 +40,9 @@ func startREPL(id string) {
 	listTodo := listCommand.Bool("todo", false, "List tasks with status TODO")
 
 	// Flags for mark command
-	// markTaskDone := markCommand.Bool("done", false, "Mark task with status DONE")
-	// markTaskInProgress := markCommand.Bool("in-progress", false, "Mark task with status IN_PROGRESS")
-	// markTaskTodo := markCommand.Bool("todo", false, "Mark task with status TODO")
+	markTaskDone := markCommand.Bool("done", false, "Mark task with status DONE")
+	markTaskInProgress := markCommand.Bool("in-progress", false, "Mark task with status IN_PROGRESS")
+	markTaskTodo := markCommand.Bool("todo", false, "Mark task with status TODO")
 
 	for {
 		fmt.Print("> ")
@@ -50,13 +54,13 @@ func startREPL(id string) {
 			break
 		}
 
-		handleCommand(input, taskService, listCommand, addCommand, updateCommand, deleteCommand, markCommand, listDone, listInProgress, listTodo)
+		handleCommand(input, taskService, listCommand, addCommand, updateCommand, deleteCommand, markCommand, listDone, listInProgress, listTodo, markTaskDone, markTaskInProgress, markTaskTodo, deleteAll)
 	}
 }
 
-func handleCommand(input string, taskService *task.TaskService, listCommand, addCommand, updateCommand, deleteCommand, markCommand *flag.FlagSet, listDone, listInProgress, listTodo *bool) {
+func handleCommand(input string, taskService *task.TaskService, listCommand, addCommand, updateCommand, deleteCommand, markCommand *flag.FlagSet, listDone, listInProgress, listTodo, markTaskDone, markTaskInProgress, markTaskTodo, deleteAll *bool) {
+	fmt.Println("marks", *markTaskDone, *markTaskInProgress, *markTaskTodo)
 	parts := strings.Fields(input)
-	fmt.Println("parts:", parts)
 	if len(parts) == 0 {
 		return
 	}
@@ -66,10 +70,24 @@ func handleCommand(input string, taskService *task.TaskService, listCommand, add
 
 	switch command {
 	case "delete":
-		listCommand.Parse(args)
+		deleteCommand.Parse(args)
+		if deleteCommand.Parsed() {
+			fmt.Println(*deleteAll, "deleteAll")
+			if len(deleteCommand.Args()) != 1 && !*deleteAll {
+				fmt.Println("USAGE: delete <task_id> | --all")
+				return
+			}
 
-		if listCommand.Parsed() {
-			fmt.Println("delete command parsed", listCommand.Args())
+			if *deleteAll {
+				if err := taskService.DeleteAllTasks(); err != nil {
+					fmt.Println("Error:", err)
+				}
+			} else {
+				if err := taskService.DeleteTask(deleteCommand.Args()[0]); err != nil {
+					fmt.Println("Error:", err)
+				}
+			}
+
 		}
 	case "list":
 		listCommand.Parse(args)
@@ -92,16 +110,55 @@ func handleCommand(input string, taskService *task.TaskService, listCommand, add
 	case "add":
 		addCommand.Parse(args)
 		if addCommand.Parsed() {
-			if len(addCommand.Args()) != 1 {
-				fmt.Println("USAGE: add \"task title\"")
+			if len(addCommand.Args()) < 1 {
+				fmt.Println("USAGE: add <task_name>")
 				return
 			}
-			if err := taskService.CreateTask(addCommand.Args()[0]); err != nil {
+
+			taskTitle := strings.Join(addCommand.Args(), " ")
+			if err := taskService.CreateTask(taskTitle); err != nil {
 				fmt.Println("Error:", err)
 			}
 		}
+
+	case "update":
+		updateCommand.Parse(args)
+		if updateCommand.Parsed() {
+			if len(updateCommand.Args()) != 2 {
+				fmt.Println("USAGE: update <task_id> \"new task name\"")
+				return
+			}
+			if err := taskService.UpdateTaskTitle(updateCommand.Args()[0], updateCommand.Args()[1]); err != nil {
+				fmt.Println("Error:", err)
+			}
+		}
+	case "mark":
+		markCommand.Parse(args)
+		fmt.Println(args, "args")
+		fmt.Println(len(markCommand.Args()), "args length")
+		if markCommand.Parsed() {
+			if len(markCommand.Args()) != 1 {
+				fmt.Println("USAGE: mark --done | --in-progress | --todo <task_id> ")
+				return
+			}
+			var status task.TaskStatus
+			switch {
+			case *markTaskDone:
+				status = task.DONE
+			case *markTaskInProgress:
+				status = task.IN_PROGRESS
+			case *markTaskTodo:
+				status = task.TODO
+			default:
+				fmt.Println("You must specify a task status using --done | --in-progress | --todo")
+				return
+			}
+			if err := taskService.UpdateTaskStatus(markCommand.Args()[0], status); err != nil {
+				fmt.Println("Error:", err)
+			}
+		}
+
 	case "switch-project":
-		// Switch project logic
 	default:
 		fmt.Println("Unknown command:", command)
 	}
@@ -142,11 +199,14 @@ func main() {
 	case constants.ADD:
 		addCommand.Parse(os.Args[2:])
 		if addCommand.Parsed() {
-			if len(addCommand.Args()) != 1 {
-				fmt.Println("USAGE: add \"project name\"")
+			if len(addCommand.Args()) < 1 {
+				fmt.Println("USAGE: add project name")
 				return
 			}
-			if err := projectService.CreateProject(addCommand.Args()[0]); err != nil {
+
+			projectName := strings.Join(addCommand.Args(), " ")
+
+			if err := projectService.CreateProject(projectName); err != nil {
 				fmt.Println("Error:", err)
 			}
 		}
@@ -170,15 +230,6 @@ func main() {
 		}
 	case constants.UPDATE:
 		updateCommand.Parse(os.Args[2:])
-		// if updateCommand.Parsed() {
-		// 	if len(updateCommand.Args()) != 2 {
-		// 		fmt.Println("USAGE: update <task_id> \"new task name\"")
-		// 		return
-		// 	}
-		// 	if err := taskService.UpdateTaskTitle(updateCommand.Args()[0], updateCommand.Args()[1]); err != nil {
-		// 		fmt.Println("Error:", err)
-		// 	}
-		// }
 		if updateCommand.Parsed() {
 			if len(updateCommand.Args()) != 2 {
 				fmt.Println("USAGE: update <project_id> \"new project name\"")
@@ -190,23 +241,6 @@ func main() {
 		}
 	case constants.DELETE:
 		deleteCommand.Parse(os.Args[2:])
-		// if deleteCommand.Parsed() {
-		// 	if len(deleteCommand.Args()) != 1 && !*deleteAll {
-		// 		fmt.Println("USAGE: delete <task_id> | --all")
-		// 		return
-		// 	}
-		//
-		// 	if *deleteAll {
-		// 		if err := taskService.DeleteAllTasks(); err != nil {
-		// 			fmt.Println("Error:", err)
-		// 		}
-		// 	} else {
-		// 		if err := taskService.DeleteTask(deleteCommand.Args()[0]); err != nil {
-		// 			fmt.Println("Error:", err)
-		// 		}
-		// 	}
-		//
-		// }
 		if deleteCommand.Parsed() {
 			if len(deleteCommand.Args()) != 1 && !*deleteAll {
 				fmt.Println("USAGE: delete <project_id> | --all")
@@ -226,27 +260,6 @@ func main() {
 		}
 	case constants.MARK:
 		markCommand.Parse(os.Args[2:])
-		// if markCommand.Parsed() {
-		// 	if len(markCommand.Args()) != 1 {
-		// 		fmt.Println("USAGE: mark --done | --in-progress | --todo <task_id> ")
-		// 		return
-		// 	}
-		// 	var status task.TaskStatus
-		// 	switch {
-		// 	case *markTaskDone:
-		// 		status = task.DONE
-		// 	case *markTaskInProgress:
-		// 		status = task.IN_PROGRESS
-		// 	case *markTaskTodo:
-		// 		status = task.TODO
-		// 	default:
-		// 		fmt.Println("You must specify a task status using --done | --in-progress | --todo")
-		// 		return
-		// 	}
-		// 	if err := taskService.UpdateTaskStatus(markCommand.Args()[0], status); err != nil {
-		// 		fmt.Println("Error:", err)
-		// 	}
-		// }
 
 		if markCommand.Parsed() {
 			if len(markCommand.Args()) != 1 {

@@ -36,7 +36,6 @@ type TaskService struct {
 
 func NewTaskService(id string, table *tablewriter.Table) *TaskService {
 	filePath := fmt.Sprintf("%s_%s", id, constants.TASK_FILE_NAME)
-	table.SetHeader([]string{"ID", "Title", "Status", "Create Date", "Update Date"})
 
 	return &TaskService{
 		filePath: filePath,
@@ -196,6 +195,9 @@ func defineFooterText(nbOfLeftTasks, nbOfTotalTasks int) string {
 }
 
 func (s *TaskService) ListTasks(statusFilter TaskStatus) error {
+	s.table.ClearRows()
+	s.table.ClearFooter()
+
 	tasks, err := s.readTasksFromFile()
 	if err != nil {
 		return err
@@ -224,7 +226,6 @@ func (s *TaskService) ListTasks(statusFilter TaskStatus) error {
 		tablewriter.Colors{tablewriter.Bold},
 	)
 	s.table.SetFooterColor(tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold})
-	// s.table.SetCaption(true, "Tasks List")
 
 	s.table.Render()
 
