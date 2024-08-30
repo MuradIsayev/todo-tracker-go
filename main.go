@@ -18,48 +18,28 @@ import (
 	"github.com/olekukonko/tablewriter"
 )
 
-func startREPL(id string) {
+func startREPL(projectID string) {
 	fmt.Println("Welcome to the Task Management CLI - Interactive Mode")
 	reader := bufio.NewReader(os.Stdin)
 
 	taskTable := tablewriter.NewWriter(os.Stdout)
-	taskService := task.NewTaskService(id, taskTable)
+	taskService := task.NewTaskService(projectID, taskTable)
 	taskTable.SetHeader([]string{"ID", "Title", "Status", "Create Date", "Update Date"})
-
-	listCommand := flag.NewFlagSet(constants.LIST, flag.ExitOnError)
-	addCommand := flag.NewFlagSet(constants.ADD, flag.ExitOnError)
-	updateCommand := flag.NewFlagSet(constants.UPDATE, flag.ExitOnError)
-	deleteCommand := flag.NewFlagSet(constants.DELETE, flag.ExitOnError)
-	markCommand := flag.NewFlagSet(constants.MARK, flag.ExitOnError)
-
-	deleteAll := deleteCommand.Bool("all", false, "Delete all projects")
-
-	// Flags for list command
-	listDone := listCommand.Bool("done", false, "List tasks with status DONE")
-	listInProgress := listCommand.Bool("in-progress", false, "List tasks with status IN_PROGRESS")
-	listTodo := listCommand.Bool("todo", false, "List tasks with status TODO")
-
-	// Flags for mark command
-	markTaskDone := markCommand.Bool("done", false, "Mark task with status DONE")
-	markTaskInProgress := markCommand.Bool("in-progress", false, "Mark task with status IN_PROGRESS")
-	markTaskTodo := markCommand.Bool("todo", false, "Mark task with status TODO")
 
 	for {
 		fmt.Print("> ")
 		input, _ := reader.ReadString('\n')
-		fmt.Println("input:", input)
 		input = strings.TrimSpace(input)
 
 		if input == "exit" || input == "quit" {
 			break
 		}
 
-		handleCommand(input, taskService, listCommand, addCommand, updateCommand, deleteCommand, markCommand, listDone, listInProgress, listTodo, markTaskDone, markTaskInProgress, markTaskTodo, deleteAll)
+		executeCommand(input, taskService)
 	}
 }
 
-func handleCommand(input string, taskService *task.TaskService, listCommand, addCommand, updateCommand, deleteCommand, markCommand *flag.FlagSet, listDone, listInProgress, listTodo, markTaskDone, markTaskInProgress, markTaskTodo, deleteAll *bool) {
-	fmt.Println("marks", *markTaskDone, *markTaskInProgress, *markTaskTodo)
+func executeCommand(input string, taskService *task.TaskService) {
 	parts := strings.Fields(input)
 	if len(parts) == 0 {
 		return
@@ -69,236 +49,304 @@ func handleCommand(input string, taskService *task.TaskService, listCommand, add
 	args := parts[1:]
 
 	switch command {
-	case "delete":
-		deleteCommand.Parse(args)
-		if deleteCommand.Parsed() {
-			fmt.Println(*deleteAll, "deleteAll")
-			if len(deleteCommand.Args()) != 1 && !*deleteAll {
-				fmt.Println("USAGE: delete <task_id> | --all")
-				return
-			}
-
-			if *deleteAll {
-				if err := taskService.DeleteAllTasks(); err != nil {
-					fmt.Println("Error:", err)
-				}
-			} else {
-				if err := taskService.DeleteTask(deleteCommand.Args()[0]); err != nil {
-					fmt.Println("Error:", err)
-				}
-			}
-
-		}
-	case "list":
-		listCommand.Parse(args)
-		if listCommand.Parsed() {
-			var statusFilter task.TaskStatus
-			switch {
-			case *listDone:
-				statusFilter = task.DONE
-			case *listInProgress:
-				statusFilter = task.IN_PROGRESS
-			case *listTodo:
-				statusFilter = task.TODO
-			default:
-				statusFilter = -1
-			}
-			if err := taskService.ListTasks(statusFilter); err != nil {
-				fmt.Println("Error:", err)
-			}
-		}
-	case "add":
-		addCommand.Parse(args)
-		if addCommand.Parsed() {
-			if len(addCommand.Args()) < 1 {
-				fmt.Println("USAGE: add <task_name>")
-				return
-			}
-
-			taskTitle := strings.Join(addCommand.Args(), " ")
-			if err := taskService.CreateTask(taskTitle); err != nil {
-				fmt.Println("Error:", err)
-			}
-		}
-
-	case "update":
-		updateCommand.Parse(args)
-		if updateCommand.Parsed() {
-			if len(updateCommand.Args()) != 2 {
-				fmt.Println("USAGE: update <task_id> \"new task name\"")
-				return
-			}
-			if err := taskService.UpdateTaskTitle(updateCommand.Args()[0], updateCommand.Args()[1]); err != nil {
-				fmt.Println("Error:", err)
-			}
-		}
-	case "mark":
-		markCommand.Parse(args)
-		fmt.Println(args, "args")
-		fmt.Println(len(markCommand.Args()), "args length")
-		if markCommand.Parsed() {
-			if len(markCommand.Args()) != 1 {
-				fmt.Println("USAGE: mark --done | --in-progress | --todo <task_id> ")
-				return
-			}
-			var status task.TaskStatus
-			switch {
-			case *markTaskDone:
-				status = task.DONE
-			case *markTaskInProgress:
-				status = task.IN_PROGRESS
-			case *markTaskTodo:
-				status = task.TODO
-			default:
-				fmt.Println("You must specify a task status using --done | --in-progress | --todo")
-				return
-			}
-			if err := taskService.UpdateTaskStatus(markCommand.Args()[0], status); err != nil {
-				fmt.Println("Error:", err)
-			}
-		}
-
-	case "switch-project":
+	case constants.ADD:
+		handleAddCommand(args, taskService)
+	case constants.LIST:
+		handleListCommand(args, taskService)
+	case constants.UPDATE:
+		handleUpdateCommand(args, taskService)
+	case constants.DELETE:
+		handleDeleteCommand(args, taskService)
+	case constants.MARK:
+		handleMarkCommand(args, taskService)
+	case "cdn":
+		handleCountdownCommand(args, taskService)
 	default:
 		fmt.Println("Unknown command:", command)
 	}
 }
 
+func handleCountdownCommand(args []string, taskService *task.TaskService) {
+	if len(args) != 3 {
+		fmt.Println("USAGE: cdn <task_id> --time <minutes>")
+		return
+	}
+	// Define the countdown command
+	countdownCommand := flag.NewFlagSet("countdown", flag.ExitOnError)
+	timePtr := countdownCommand.Int("time", 1, "Specify the countdown duration in minutes")
+
+	// Parse the arguments after the command
+	countdownCommand.Parse(args[1:])
+
+	taskId := countdownCommand.Arg(0)
+
+	fmt.Println(*timePtr, "minutes")
+
+	fmt.Printf("Starting countdown for Task %s: %d minutes...\n", taskId, *timePtr)
+
+	taskService.StartCountdown(taskId, *timePtr)
+}
+
+func handleAddCommand(args []string, taskService *task.TaskService) {
+	if len(args) < 1 {
+		fmt.Println("USAGE: add <task_name>")
+		return
+	}
+
+	taskTitle := strings.Join(args, " ")
+	if err := taskService.CreateTask(taskTitle); err != nil {
+		fmt.Println("Error:", err)
+	}
+}
+
+func handleListCommand(args []string, taskService *task.TaskService) {
+	listCommand := flag.NewFlagSet(constants.LIST, flag.ExitOnError)
+	listDone := listCommand.Bool("done", false, "List tasks with status DONE")
+	listInProgress := listCommand.Bool("in-progress", false, "List tasks with status IN_PROGRESS")
+	listTodo := listCommand.Bool("todo", false, "List tasks with status TODO")
+
+	listCommand.Parse(args)
+
+	var statusFilter task.TaskStatus
+	switch {
+	case *listDone:
+		statusFilter = task.DONE
+	case *listInProgress:
+		statusFilter = task.IN_PROGRESS
+	case *listTodo:
+		statusFilter = task.TODO
+	default:
+		statusFilter = -1
+	}
+
+	if err := taskService.ListTasks(statusFilter); err != nil {
+		fmt.Println("Error:", err)
+	}
+}
+
+func handleUpdateCommand(args []string, taskService *task.TaskService) {
+	if len(args) != 2 {
+		fmt.Println("USAGE: update <task_id> \"new task name\"")
+		return
+	}
+
+	if err := taskService.UpdateTaskTitle(args[0], args[1]); err != nil {
+		fmt.Println("Error:", err)
+	}
+}
+
+func handleDeleteCommand(args []string, taskService *task.TaskService) {
+	deleteCommand := flag.NewFlagSet(constants.DELETE, flag.ExitOnError)
+	deleteAll := deleteCommand.Bool("all", false, "Delete all tasks")
+	deleteCommand.Parse(args)
+
+	if *deleteAll {
+		if err := taskService.DeleteAllTasks(); err != nil {
+			fmt.Println("Error:", err)
+		}
+		return
+	}
+
+	if len(deleteCommand.Args()) != 1 {
+		fmt.Println("USAGE: delete <task_id> | --all")
+		return
+	}
+
+	if err := taskService.DeleteTask(deleteCommand.Args()[0]); err != nil {
+		fmt.Println("Error:", err)
+	}
+}
+
+func handleMarkCommand(args []string, taskService *task.TaskService) {
+	if len(args) != 2 {
+		fmt.Println("USAGE: mark <task_id> --done | --in-progress | --todo")
+		return
+	}
+
+	taskID := args[0]
+	// Create a flag set for parsing the status flags
+	markCommand := flag.NewFlagSet("mark", flag.ExitOnError)
+
+	// Define the flags
+	markDone := markCommand.Bool("done", false, "Mark task as DONE")
+	markInProgress := markCommand.Bool("in-progress", false, "Mark task as IN_PROGRESS")
+	markTodo := markCommand.Bool("todo", false, "Mark task as TODO")
+
+	// Parse the remaining args after extracting the task ID
+	err := markCommand.Parse(args[1:])
+	if err != nil {
+		fmt.Println("Error parsing flags:", err)
+		return
+	}
+
+	// Determine the task status based on the parsed flags
+	var status task.TaskStatus
+	switch {
+	case *markDone:
+		status = task.DONE
+	case *markInProgress:
+		status = task.IN_PROGRESS
+	case *markTodo:
+		status = task.TODO
+	default:
+		fmt.Println("Invalid status. Use --done, --in-progress, or --todo.")
+		return
+	}
+
+	if err := taskService.UpdateTaskStatus(taskID, status); err != nil {
+		fmt.Println("Error:", err)
+	}
+}
+
 func main() {
 	projectTable := tablewriter.NewWriter(os.Stdout)
-
 	projectService := project.NewProjectService(constants.PROJECT_FILE_NAME, projectTable)
 
-	// Commands
-	replCommand := flag.NewFlagSet("repl", flag.ExitOnError)
-	listCommand := flag.NewFlagSet(constants.LIST, flag.ExitOnError)
-	addCommand := flag.NewFlagSet(constants.ADD, flag.ExitOnError)
-	updateCommand := flag.NewFlagSet(constants.UPDATE, flag.ExitOnError)
-	deleteCommand := flag.NewFlagSet(constants.DELETE, flag.ExitOnError)
-	markCommand := flag.NewFlagSet(constants.MARK, flag.ExitOnError)
-
-	// Flags for mark command of Project
-	markProjectCompleted := markCommand.Bool("completed", false, "Mark task with status COMPLETED")
-	markProjectStarted := markCommand.Bool("started", false, "Mark task with status STARTED")
-	markProjectNotStarted := markCommand.Bool("not-started", false, "Mark task with status NOT_STARTED")
-
-	// Flags for list command of Project
-	listProjectCompleted := listCommand.Bool("completed", false, "List projects with status COMPLETED")
-	listProjectStarted := listCommand.Bool("started", false, "List projects with status STARTED")
-	listProjectNotStarted := listCommand.Bool("not-started", false, "List projects with status NOT_STARTED")
-
-	// Flags for delete command of Project
-	deleteAll := deleteCommand.Bool("all", false, "Delete all projects")
-
 	if len(os.Args) < 2 {
-		fmt.Println("Expected 'add', 'list', 'update', 'delete', or 'mark' commands")
+		fmt.Println("Expected 'add', 'list', 'update', 'delete', 'mark', or 'repl' commands")
 		os.Exit(1)
 	}
 
 	switch os.Args[1] {
+	case constants.REPL:
+		handleREPLCommand(os.Args[2:], projectService)
 	case constants.ADD:
-		addCommand.Parse(os.Args[2:])
-		if addCommand.Parsed() {
-			if len(addCommand.Args()) < 1 {
-				fmt.Println("USAGE: add project name")
-				return
-			}
-
-			projectName := strings.Join(addCommand.Args(), " ")
-
-			if err := projectService.CreateProject(projectName); err != nil {
-				fmt.Println("Error:", err)
-			}
-		}
+		handleProjectAddCommand(os.Args[2:], projectService)
 	case constants.LIST:
-		listCommand.Parse(os.Args[2:])
-		if listCommand.Parsed() {
-			var statusFilter project.ProjectStatus
-			switch {
-			case *listProjectCompleted:
-				statusFilter = project.COMPLETED
-			case *listProjectStarted:
-				statusFilter = project.STARTED
-			case *listProjectNotStarted:
-				statusFilter = project.NOT_STARTED
-			default:
-				statusFilter = -1
-			}
-			if err := projectService.ListProjects(statusFilter); err != nil {
-				fmt.Println("Error:", err)
-			}
-		}
+		handleProjectListCommand(os.Args[2:], projectService)
 	case constants.UPDATE:
-		updateCommand.Parse(os.Args[2:])
-		if updateCommand.Parsed() {
-			if len(updateCommand.Args()) != 2 {
-				fmt.Println("USAGE: update <project_id> \"new project name\"")
-				return
-			}
-			if err := projectService.UpdateProjectName(updateCommand.Args()[0], updateCommand.Args()[1]); err != nil {
-				fmt.Println("Error:", err)
-			}
-		}
+		handleProjectUpdateCommand(os.Args[2:], projectService)
 	case constants.DELETE:
-		deleteCommand.Parse(os.Args[2:])
-		if deleteCommand.Parsed() {
-			if len(deleteCommand.Args()) != 1 && !*deleteAll {
-				fmt.Println("USAGE: delete <project_id> | --all")
-				return
-			}
-
-			if *deleteAll {
-				if err := projectService.DeleteAllProjects(); err != nil {
-					fmt.Println("Error:", err)
-				}
-			} else {
-				if err := projectService.DeleteProject(deleteCommand.Args()[0]); err != nil {
-					fmt.Println("Error:", err)
-				}
-			}
-
-		}
+		handleProjectDeleteCommand(os.Args[2:], projectService)
 	case constants.MARK:
-		markCommand.Parse(os.Args[2:])
-
-		if markCommand.Parsed() {
-			if len(markCommand.Args()) != 1 {
-				fmt.Println("USAGE: mark --completed | --started | --not-completed <project_id> ")
-				return
-			}
-			var status project.ProjectStatus
-			switch {
-			case *markProjectCompleted:
-				status = project.COMPLETED
-			case *markProjectStarted:
-				status = project.STARTED
-			case *markProjectNotStarted:
-				status = project.NOT_STARTED
-			default:
-				fmt.Println("You must specify a task status using --done | --in-progress | --todo")
-				return
-			}
-			if err := projectService.UpdateProjectStatus(markCommand.Args()[0], status); err != nil {
-				fmt.Println("Error:", err)
-			}
-		}
-	case "repl":
-		replCommand.Parse(os.Args[2:])
-		if replCommand.Parsed() {
-			if len(replCommand.Args()) != 1 {
-				fmt.Println("USAGE: repl <project_id>")
-				return
-			}
-
-			if isProjectExists := projectService.IsProjectExists(replCommand.Args()[0]); !isProjectExists {
-				fmt.Println("Project with ID=", replCommand.Args()[0], "not found")
-				os.Exit(1)
-			}
-
-			startREPL(replCommand.Args()[0])
-		}
+		handleProjectMarkCommand(os.Args[2:], projectService)
 	default:
-		fmt.Println("Expected 'add', 'list', 'update', 'delete', or 'mark' commands")
+		fmt.Println("Unknown command:", os.Args[1])
 		os.Exit(1)
+	}
+}
+
+func handleREPLCommand(args []string, projectService *project.ProjectService) {
+	if len(args) != 1 {
+		fmt.Println("USAGE: repl <project_id>")
+		return
+	}
+
+	projectID := args[0]
+	if !projectService.IsProjectExists(projectID) {
+		fmt.Println("Project with ID=", projectID, "not found")
+		os.Exit(1)
+	}
+
+	startREPL(projectID)
+}
+
+func handleProjectAddCommand(args []string, projectService *project.ProjectService) {
+	if len(args) < 1 {
+		fmt.Println("USAGE: add <project_name>")
+		return
+	}
+
+	projectName := strings.Join(args, " ")
+	if err := projectService.CreateProject(projectName); err != nil {
+		fmt.Println("Error:", err)
+	}
+}
+
+func handleProjectListCommand(args []string, projectService *project.ProjectService) {
+	listCommand := flag.NewFlagSet(constants.LIST, flag.ExitOnError)
+	listCompleted := listCommand.Bool("completed", false, "List projects with status COMPLETED")
+	listStarted := listCommand.Bool("started", false, "List projects with status STARTED")
+	listNotStarted := listCommand.Bool("not-started", false, "List projects with status NOT_STARTED")
+
+	listCommand.Parse(args)
+
+	var statusFilter project.ProjectStatus
+	switch {
+	case *listCompleted:
+		statusFilter = project.COMPLETED
+	case *listStarted:
+		statusFilter = project.STARTED
+	case *listNotStarted:
+		statusFilter = project.NOT_STARTED
+	default:
+		statusFilter = -1
+	}
+
+	if err := projectService.ListProjects(statusFilter); err != nil {
+		fmt.Println("Error:", err)
+	}
+}
+
+func handleProjectUpdateCommand(args []string, projectService *project.ProjectService) {
+	if len(args) != 2 {
+		fmt.Println("USAGE: update <project_id> \"new project name\"")
+		return
+	}
+
+	if err := projectService.UpdateProjectName(args[0], args[1]); err != nil {
+		fmt.Println("Error:", err)
+	}
+}
+
+func handleProjectDeleteCommand(args []string, projectService *project.ProjectService) {
+	deleteCommand := flag.NewFlagSet(constants.DELETE, flag.ExitOnError)
+	deleteAll := deleteCommand.Bool("all", false, "Delete all projects")
+	deleteCommand.Parse(args)
+
+	if *deleteAll {
+		if err := projectService.DeleteAllProjects(); err != nil {
+			fmt.Println("Error:", err)
+		}
+		return
+	}
+
+	if len(deleteCommand.Args()) != 1 {
+		fmt.Println("USAGE: delete <project_id> | --all")
+		return
+	}
+
+	if err := projectService.DeleteProject(deleteCommand.Args()[0]); err != nil {
+		fmt.Println("Error:", err)
+	}
+}
+
+func handleProjectMarkCommand(args []string, projectService *project.ProjectService) {
+	if len(args) != 2 {
+		fmt.Println("USAGE: mark <project_id> --completed | --started | --not-started")
+		return
+	}
+
+	projectID := args[0]
+	// Create a flag set for parsing the status flags
+	markCommand := flag.NewFlagSet("mark", flag.ExitOnError)
+
+	// Define the flags
+	markProjectCompleted := markCommand.Bool("completed", false, "Mark task as COMPLETED")
+	markProjectStarted := markCommand.Bool("started", false, "Mark task as STARTED")
+	markProjectNotStarted := markCommand.Bool("not-started", false, "Mark task as NOT_STARTED")
+
+	// Parse the remaining args after extracting the task ID
+	err := markCommand.Parse(args[1:])
+	if err != nil {
+		fmt.Println("Error parsing flags:", err)
+		return
+	}
+
+	var status project.ProjectStatus
+	switch {
+	case *markProjectCompleted:
+		status = project.COMPLETED
+	case *markProjectStarted:
+		status = project.STARTED
+	case *markProjectNotStarted:
+		status = project.NOT_STARTED
+	default:
+		fmt.Println("Invalid status. Use --completed, --started, or --not-started.")
+		return
+	}
+
+	if err := projectService.UpdateProjectStatus(projectID, status); err != nil {
+		fmt.Println("Error:", err)
 	}
 }

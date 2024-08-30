@@ -6,6 +6,7 @@ const (
 	DELETE string = "delete"
 	LIST   string = "list"
 	MARK   string = "mark"
+	REPL   string = "repl"
 )
 
 const TASK_FILE_NAME = "task.json"

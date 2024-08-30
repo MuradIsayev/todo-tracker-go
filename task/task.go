@@ -27,6 +27,7 @@ type Task struct {
 	Status    TaskStatus `json:"status"`
 	CreatedAt time.Time  `json:"createdAt"`
 	UpdatedAt time.Time  `json:"updatedAt"`
+	// totalSpentTime int        `json:"totalSpentTime"`
 }
 
 type TaskService struct {
@@ -41,6 +42,33 @@ func NewTaskService(id string, table *tablewriter.Table) *TaskService {
 		filePath: filePath,
 		table:    table,
 	}
+}
+
+func (s *TaskService) StartCountdown(taskID string, countdownMinutes int) {
+	totalSeconds := countdownMinutes * 60 // Convert total minutes to seconds
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	// Channel to signal when the countdown is complete
+	done := make(chan bool)
+
+	go func() {
+		fmt.Println("concurrent function started")
+		for totalSeconds > 0 {
+			<-ticker.C
+			totalSeconds--
+			minutes := totalSeconds / 60
+			seconds := totalSeconds % 60
+			// Replace the current line with the updated time
+			fmt.Printf("\rTask %s: %02d:%02d remaining...", taskID, minutes, seconds)
+		}
+		// Signal that the countdown is complete
+		done <- true
+	}()
+
+	// Wait for the countdown to finish
+	<-done
+	fmt.Printf("\rCountdown complete for task %s.               \n", taskID)
 }
 
 func (taskStatus TaskStatus) String() string {
