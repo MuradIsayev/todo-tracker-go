@@ -22,12 +22,12 @@ const (
 )
 
 type Task struct {
-	Id        int        `json:"id"`
-	Title     string     `json:"title"`
-	Status    TaskStatus `json:"status"`
-	CreatedAt time.Time  `json:"createdAt"`
-	UpdatedAt time.Time  `json:"updatedAt"`
-	// totalSpentTime int        `json:"totalSpentTime"`
+	Id             int        `json:"id"`
+	Title          string     `json:"title"`
+	Status         TaskStatus `json:"status"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
+	TotalSpentTime int        `json:"totalSpentTime"`
 }
 
 type TaskService struct {
@@ -36,6 +36,8 @@ type TaskService struct {
 }
 
 func NewTaskService(id string, table *tablewriter.Table) *TaskService {
+	table.SetHeader([]string{"ID", "Title", "Status", "Create Date", "Update Date", "Total Spent Time"})
+
 	filePath := fmt.Sprintf("%s_%s", id, constants.TASK_FILE_NAME)
 
 	return &TaskService{
@@ -44,31 +46,86 @@ func NewTaskService(id string, table *tablewriter.Table) *TaskService {
 	}
 }
 
-func (s *TaskService) StartCountdown(taskID string, countdownMinutes int) {
-	totalSeconds := countdownMinutes * 60 // Convert total minutes to seconds
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
+type CountdownController struct {
+	PauseChan   chan bool
+	ResumeChan  chan bool
+	StopChan    chan bool
+	DoneChan    chan bool
+	DisplayChan chan string
+}
 
-	// Channel to signal when the countdown is complete
-	done := make(chan bool)
+func NewCountdownController() *CountdownController {
+	return &CountdownController{
+		PauseChan:   make(chan bool),
+		ResumeChan:  make(chan bool),
+		StopChan:    make(chan bool),
+		DoneChan:    make(chan bool),
+		DisplayChan: make(chan string),
+	}
+}
+
+func (s *TaskService) StartCountdown(taskID string, countdownMinutes int, controller *CountdownController) {
+	remainingSeconds := countdownMinutes * 60
 
 	go func() {
-		fmt.Println("concurrent function started")
-		for totalSeconds > 0 {
-			<-ticker.C
-			totalSeconds--
-			minutes := totalSeconds / 60
-			seconds := totalSeconds % 60
-			// Replace the current line with the updated time
-			fmt.Printf("\rTask %s: %02d:%02d remaining...", taskID, minutes, seconds)
-		}
-		// Signal that the countdown is complete
-		done <- true
-	}()
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+		paused := false
 
-	// Wait for the countdown to finish
-	<-done
-	fmt.Printf("\rCountdown complete for task %s.               \n", taskID)
+		for remainingSeconds > 0 {
+			select {
+			case <-controller.StopChan:
+				controller.DisplayChan <- fmt.Sprintf("Countdown stopped early for task %s.", taskID)
+				return
+			case <-controller.PauseChan:
+				paused = true
+				controller.DisplayChan <- "Countdown paused. Type (r)esume to continue."
+			case <-controller.ResumeChan:
+				if paused {
+					paused = false
+					controller.DisplayChan <- "Countdown resumed."
+				}
+			case <-ticker.C:
+				if !paused {
+					remainingSeconds--
+					minutes := remainingSeconds / 60
+					seconds := remainingSeconds % 60
+					controller.DisplayChan <- fmt.Sprintf("Task %s: %02d:%02d remaining...", taskID, minutes, seconds)
+				}
+			case <-controller.DoneChan:
+				controller.DisplayChan <- fmt.Sprintf("Countdown complete for task %s.", taskID)
+				// update timer in task
+				s.UpdateTaskSpentTime(taskID, countdownMinutes*60-remainingSeconds)
+				return
+			}
+		}
+
+		controller.DisplayChan <- fmt.Sprintf("Countdown complete for task %s.", taskID)
+		controller.DoneChan <- true
+	}()
+}
+
+func (s *TaskService) UpdateTaskSpentTime(id string, spentTime int) error {
+	taskId, err := s.validateID(id)
+	if err != nil {
+		return err
+	}
+
+	tasks, err := s.readTasksFromFile()
+	if err != nil {
+		return err
+	}
+
+	index, task, err := s.findTaskById(tasks, taskId)
+	if err != nil {
+		return err
+	}
+
+	task.TotalSpentTime += spentTime
+	// task.UpdatedAt = time.Now()
+	tasks[index] = *task
+
+	return s.writeTasksToFile(tasks)
 }
 
 func (taskStatus TaskStatus) String() string {
@@ -237,7 +294,7 @@ func (s *TaskService) ListTasks(statusFilter TaskStatus) error {
 		if statusFilter == -1 || task.Status == statusFilter {
 			createdAt := task.CreatedAt.Format(constants.DATE_FORMAT)
 			updatedAt := task.UpdatedAt.Format(constants.DATE_FORMAT)
-			s.table.Append([]string{strconv.Itoa(task.Id), task.Title, task.Status.String(), createdAt, updatedAt})
+			s.table.Append([]string{strconv.Itoa(task.Id), task.Title, task.Status.String(), createdAt, updatedAt, strconv.Itoa(task.TotalSpentTime)})
 
 			if task.Status == TODO {
 				nbOfLeftTasks++
@@ -246,14 +303,15 @@ func (s *TaskService) ListTasks(statusFilter TaskStatus) error {
 	}
 
 	s.table.SetRowLine(true)
-	s.table.SetFooter([]string{"", "", "", " ", defineFooterText(nbOfLeftTasks, len(tasks))})
+	s.table.SetFooter([]string{"", "", "", "", " ", defineFooterText(nbOfLeftTasks, len(tasks))})
 	s.table.SetHeaderColor(tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
+		tablewriter.Colors{tablewriter.Bold},
 	)
-	s.table.SetFooterColor(tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold})
+	s.table.SetFooterColor(tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold})
 
 	s.table.Render()
 

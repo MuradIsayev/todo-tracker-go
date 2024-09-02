@@ -1,7 +1,10 @@
 package main
 
 /*
-TODO: Add more features like sorting tasks by date, filtering tasks by date range, etc.
+FIX: Fix the issue with the command line input not working properly when the timer is done.
+FIX: Find task name and utilize the name for displaying the task name in the countdown timer.
+TODO: Add total time spent for projects by summing up the time spent on each task.
+TODO: Improve the countdown timer to display the time in a more human-readable format.
 TODO: Maybee add unit tests?
 */
 
@@ -24,7 +27,6 @@ func startREPL(projectID string) {
 
 	taskTable := tablewriter.NewWriter(os.Stdout)
 	taskService := task.NewTaskService(projectID, taskTable)
-	taskTable.SetHeader([]string{"ID", "Title", "Status", "Create Date", "Update Date"})
 
 	for {
 		fmt.Print("> ")
@@ -59,7 +61,7 @@ func executeCommand(input string, taskService *task.TaskService) {
 		handleDeleteCommand(args, taskService)
 	case constants.MARK:
 		handleMarkCommand(args, taskService)
-	case "cdn":
+	case constants.TIMER:
 		handleCountdownCommand(args, taskService)
 	default:
 		fmt.Println("Unknown command:", command)
@@ -68,24 +70,75 @@ func executeCommand(input string, taskService *task.TaskService) {
 
 func handleCountdownCommand(args []string, taskService *task.TaskService) {
 	if len(args) != 3 {
-		fmt.Println("USAGE: cdn <task_id> --time <minutes>")
+		fmt.Println("USAGE: t <task_id> --time <duration>")
 		return
 	}
-	// Define the countdown command
-	countdownCommand := flag.NewFlagSet("countdown", flag.ExitOnError)
+	countdownCommand := flag.NewFlagSet(constants.TIMER, flag.ExitOnError)
 	timePtr := countdownCommand.Int("time", 1, "Specify the countdown duration in minutes")
 
-	// Parse the arguments after the command
-	countdownCommand.Parse(args[1:])
+	if err := countdownCommand.Parse(args[1:]); err != nil {
+		fmt.Println("Error parsing countdown command:", err)
+		return
+	}
 
-	taskId := countdownCommand.Arg(0)
+	taskID := countdownCommand.Arg(0)
+	controller := task.NewCountdownController()
 
-	fmt.Println(*timePtr, "minutes")
+	// Start the countdown in a separate goroutine
+	go taskService.StartCountdown(taskID, *timePtr, controller)
 
-	fmt.Printf("Starting countdown for Task %s: %d minutes...\n", taskId, *timePtr)
+	// Display timer updates without interrupting input
+	go func() {
+		for displayMsg := range controller.DisplayChan {
+			// Save cursor position, move up to timer line, clear it, and print updated timer
+			fmt.Print("\0337")                           // Save cursor position
+			fmt.Printf("\033[1A\033[2K\r%s", displayMsg) // Clear timer line, print new time
+			fmt.Print("\0338")                           // Restore cursor position
+		}
+	}()
 
-	taskService.StartCountdown(taskId, *timePtr)
+	// Command input handling
+	reader := bufio.NewReader(os.Stdin)
+	printControls() // Print controls line once before starting input loop
+
+	for {
+		fmt.Print("> ") // Consistently show the input prompt
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Println("Error reading input:", err)
+			continue
+		}
+
+		command := strings.TrimSpace(strings.ToLower(input))
+
+		// Clear current input line
+		// fmt.Print("\033[1A\033[2K\r> ") // Move up, clear line, and reset prompt
+
+		switch command {
+		case "p":
+			controller.PauseChan <- true
+		case "r":
+			controller.ResumeChan <- true
+		case "s":
+			controller.StopChan <- true
+			return
+		default:
+			fmt.Print("\0337")                                                                 // Save cursor position
+			fmt.Printf("\033[2A\033[2K\rUnknown command. Use (p)ause, (r)esume, or (s)top.\n") // Clear and print controls
+			fmt.Print("\0338")                                                                 // Restore cursor position
+		}
+	}
 }
+
+// Function to consistently display the controls
+func printControls() {
+	fmt.Print("\0337")                                                                                      // Save cursor position
+	fmt.Printf("\033[2A\033[2K\rControls: type (p)ause, (r)esume, or (s)top to control the countdown.\n\n") // Clear and print controls
+	fmt.Print("\0338")                                                                                      // Restore cursor position
+}
+
+// func handleCountdownCommand(args []string, taskService *task.TaskService) {
+// }
 
 func handleAddCommand(args []string, taskService *task.TaskService) {
 	if len(args) < 1 {

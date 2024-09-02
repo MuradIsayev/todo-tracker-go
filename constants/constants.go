@@ -7,6 +7,7 @@ const (
 	LIST   string = "list"
 	MARK   string = "mark"
 	REPL   string = "repl"
+	TIMER  string = "t"
 )
 
 const TASK_FILE_NAME = "task.json"
