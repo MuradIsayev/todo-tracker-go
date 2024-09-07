@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/MuradIsayev/todo-tracker/constants"
 	"github.com/MuradIsayev/todo-tracker/project"
@@ -29,9 +30,10 @@ func startREPL(projectID string) {
 	taskService := task.NewTaskService(projectID, taskTable)
 
 	for {
-		fmt.Print("> ")
+		fmt.Print(">>> ")
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input)
+		fmt.Println("Input:", input)
 
 		if input == "exit" || input == "quit" {
 			break
@@ -39,6 +41,7 @@ func startREPL(projectID string) {
 
 		executeCommand(input, taskService)
 	}
+
 }
 
 func executeCommand(input string, taskService *task.TaskService) {
@@ -73,7 +76,8 @@ func handleCountdownCommand(args []string, taskService *task.TaskService) {
 		fmt.Println("USAGE: t <task_id> --time <duration>")
 		return
 	}
-	countdownCommand := flag.NewFlagSet(constants.TIMER, flag.ExitOnError)
+
+	countdownCommand := flag.NewFlagSet("TIMER", flag.ExitOnError)
 	timePtr := countdownCommand.Int("time", 1, "Specify the countdown duration in minutes")
 
 	if err := countdownCommand.Parse(args[1:]); err != nil {
@@ -81,64 +85,74 @@ func handleCountdownCommand(args []string, taskService *task.TaskService) {
 		return
 	}
 
-	taskID := countdownCommand.Arg(0)
+	taskID := args[0]
 	controller := task.NewCountdownController()
 
+	var wg sync.WaitGroup
+
 	// Start the countdown in a separate goroutine
-	go taskService.StartCountdown(taskID, *timePtr, controller)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		taskService.StartCountdown(taskID, *timePtr, controller)
+	}()
 
 	// Display timer updates without interrupting input
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		for displayMsg := range controller.DisplayChan {
-			// Save cursor position, move up to timer line, clear it, and print updated timer
 			fmt.Print("\0337")                           // Save cursor position
 			fmt.Printf("\033[1A\033[2K\r%s", displayMsg) // Clear timer line, print new time
 			fmt.Print("\0338")                           // Restore cursor position
 		}
 	}()
 
-	// Command input handling
+	// Start a goroutine to read input commands
 	reader := bufio.NewReader(os.Stdin)
-	printControls() // Print controls line once before starting input loop
+	printControls()
 
 	for {
-		fmt.Print("> ") // Consistently show the input prompt
+		fmt.Print("T> ")
 		input, err := reader.ReadString('\n')
 		if err != nil {
 			fmt.Println("Error reading input:", err)
-			continue
+			return
 		}
+		input = strings.TrimSpace(strings.ToLower(input))
 
-		command := strings.TrimSpace(strings.ToLower(input))
-
-		// Clear current input line
-		// fmt.Print("\033[1A\033[2K\r> ") // Move up, clear line, and reset prompt
-
-		switch command {
-		case "p":
-			controller.PauseChan <- true
-		case "r":
-			controller.ResumeChan <- true
-		case "s":
-			controller.StopChan <- true
+		select {
+		case <-controller.DoneChan:
 			return
 		default:
-			fmt.Print("\0337")                                                                 // Save cursor position
-			fmt.Printf("\033[2A\033[2K\rUnknown command. Use (p)ause, (r)esume, or (s)top.\n") // Clear and print controls
-			fmt.Print("\0338")                                                                 // Restore cursor position
+			// Handle user commands from input
+			switch input {
+			case "p":
+				controller.PauseChan <- true
+			case "r":
+				controller.ResumeChan <- true
+			case "s":
+				controller.StopChan <- true // Stop and update the task time
+				return
+			case "e":
+				fmt.Println("Exiting timer mode without saving time.")
+				controller.ExitChan <- true // Exit without updating the task time
+				return
+			default:
+				fmt.Print("\0337")                                                                         // Save cursor position
+				fmt.Printf("\033[2A\033[2K\rUnknown command. Use (p)ause, (r)esume, (s)top, or (e)xit.\n") // Clear and print controls
+				fmt.Print("\0338")                                                                         // Restore cursor position
+			}
 		}
 	}
 }
 
 // Function to consistently display the controls
 func printControls() {
-	fmt.Print("\0337")                                                                                      // Save cursor position
-	fmt.Printf("\033[2A\033[2K\rControls: type (p)ause, (r)esume, or (s)top to control the countdown.\n\n") // Clear and print controls
-	fmt.Print("\0338")                                                                                      // Restore cursor position
+	fmt.Print("\0337")                                                                                              // Save cursor position
+	fmt.Printf("\033[2A\033[2K\rControls: type (p)ause, (r)esume, (s)top, or (e)xit to control the countdown.\n\n") // Clear and print controls
+	fmt.Print("\0338")                                                                                              // Restore cursor position
 }
-
-// func handleCountdownCommand(args []string, taskService *task.TaskService) {
-// }
 
 func handleAddCommand(args []string, taskService *task.TaskService) {
 	if len(args) < 1 {

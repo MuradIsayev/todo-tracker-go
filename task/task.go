@@ -52,6 +52,7 @@ type CountdownController struct {
 	StopChan    chan bool
 	DoneChan    chan bool
 	DisplayChan chan string
+	ExitChan    chan bool
 }
 
 func NewCountdownController() *CountdownController {
@@ -61,48 +62,47 @@ func NewCountdownController() *CountdownController {
 		StopChan:    make(chan bool),
 		DoneChan:    make(chan bool),
 		DisplayChan: make(chan string),
+		ExitChan:    make(chan bool),
 	}
 }
 
 func (s *TaskService) StartCountdown(taskID string, countdownMinutes int, controller *CountdownController) {
-	remainingSeconds := countdownMinutes * 60
+	remainingSeconds := countdownMinutes
 
-	go func() {
-		ticker := time.NewTicker(1 * time.Second)
-		defer ticker.Stop()
-		paused := false
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+	paused := false
 
-		for remainingSeconds > 0 {
-			select {
-			case <-controller.StopChan:
-				controller.DisplayChan <- fmt.Sprintf("Countdown stopped early for task %s.", taskID)
-				return
-			case <-controller.PauseChan:
-				paused = true
-				controller.DisplayChan <- "Countdown paused. Type (r)esume to continue."
-			case <-controller.ResumeChan:
-				if paused {
-					paused = false
-					controller.DisplayChan <- "Countdown resumed."
-				}
-			case <-ticker.C:
-				if !paused {
-					remainingSeconds--
-					minutes := remainingSeconds / 60
-					seconds := remainingSeconds % 60
-					controller.DisplayChan <- fmt.Sprintf("Task %s: %02d:%02d remaining...", taskID, minutes, seconds)
-				}
-			case <-controller.DoneChan:
-				controller.DisplayChan <- fmt.Sprintf("Countdown complete for task %s.", taskID)
-				// update timer in task
-				s.UpdateTaskSpentTime(taskID, countdownMinutes*60-remainingSeconds)
-				return
+	for remainingSeconds > 0 {
+		select {
+		case <-controller.StopChan:
+			controller.DisplayChan <- fmt.Sprintf("Countdown stopped early for task %s.", taskID)
+			s.UpdateTaskSpentTime(taskID, countdownMinutes*60-remainingSeconds) // Save the elapsed time
+			close(controller.DoneChan)                                          // Signal that the countdown has ended
+			return
+		case <-controller.ExitChan:
+			controller.DisplayChan <- fmt.Sprintf("Countdown session for task %s ignored.", taskID)
+			close(controller.DoneChan) // Exit without saving any time
+			return
+		case <-controller.PauseChan:
+			paused = true
+			controller.DisplayChan <- "Countdown paused. Type (r)esume to continue."
+		case <-controller.ResumeChan:
+			if paused {
+				paused = false
+				controller.DisplayChan <- "Countdown resumed."
+			}
+		case <-ticker.C:
+			if !paused {
+				remainingSeconds--
+				controller.DisplayChan <- fmt.Sprintf("Task %s: %02d seconds remaining...", taskID, remainingSeconds)
 			}
 		}
+	}
 
-		controller.DisplayChan <- fmt.Sprintf("Countdown complete for task %s.", taskID)
-		controller.DoneChan <- true
-	}()
+	controller.DisplayChan <- fmt.Sprintf("Countdown complete for task %s. Now press (e) to exit", taskID)
+	s.UpdateTaskSpentTime(taskID, countdownMinutes*60-remainingSeconds) // Save the full duration
+	close(controller.DoneChan)                                          // Signal that the countdown has ended
 }
 
 func (s *TaskService) UpdateTaskSpentTime(id string, spentTime int) error {
