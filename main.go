@@ -4,7 +4,6 @@ package main
 FIX: Fix the issue with the command line input not working properly when the timer is done.
 FIX: Find task name and utilize the name for displaying the task name in the countdown timer.
 TODO: Add total time spent for projects by summing up the time spent on each task.
-TODO: Improve the countdown timer to display the time in a more human-readable format.
 TODO: Maybee add unit tests?
 */
 
@@ -33,7 +32,6 @@ func startREPL(projectID string) {
 		fmt.Print(">>> ")
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input)
-		fmt.Println("Input:", input)
 
 		if input == "exit" || input == "quit" {
 			break
@@ -88,13 +86,19 @@ func handleCountdownCommand(args []string, taskService *task.TaskService) {
 	taskID := args[0]
 	controller := task.NewCountdownController()
 
+	task, err := taskService.FindTaskById(taskID)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+
 	var wg sync.WaitGroup
 
 	// Start the countdown in a separate goroutine
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		taskService.StartCountdown(taskID, *timePtr, controller)
+		taskService.StartCountdown(task, *timePtr, controller)
 	}()
 
 	// Display timer updates without interrupting input

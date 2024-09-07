@@ -66,8 +66,8 @@ func NewCountdownController() *CountdownController {
 	}
 }
 
-func (s *TaskService) StartCountdown(taskID string, countdownMinutes int, controller *CountdownController) {
-	remainingSeconds := countdownMinutes
+func (s *TaskService) StartCountdown(task *Task, countdownMinutes int, controller *CountdownController) {
+	remainingSeconds := countdownMinutes * 60
 
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -76,12 +76,12 @@ func (s *TaskService) StartCountdown(taskID string, countdownMinutes int, contro
 	for remainingSeconds > 0 {
 		select {
 		case <-controller.StopChan:
-			controller.DisplayChan <- fmt.Sprintf("Countdown stopped early for task %s.", taskID)
-			s.UpdateTaskSpentTime(taskID, countdownMinutes*60-remainingSeconds) // Save the elapsed time
-			close(controller.DoneChan)                                          // Signal that the countdown has ended
+			controller.DisplayChan <- fmt.Sprintf("Countdown stopped early for the task -- \"%s\".", task.Title)
+			s.UpdateTaskSpentTime(task.Id, countdownMinutes*60-remainingSeconds) // Save the elapsed time
+			close(controller.DoneChan)                                           // Signal that the countdown has ended
 			return
 		case <-controller.ExitChan:
-			controller.DisplayChan <- fmt.Sprintf("Countdown session for task %s ignored.", taskID)
+			controller.DisplayChan <- fmt.Sprintf("Countdown session for task -- \"%s\" ignored.", task.Title)
 			close(controller.DoneChan) // Exit without saving any time
 			return
 		case <-controller.PauseChan:
@@ -95,28 +95,28 @@ func (s *TaskService) StartCountdown(taskID string, countdownMinutes int, contro
 		case <-ticker.C:
 			if !paused {
 				remainingSeconds--
-				controller.DisplayChan <- fmt.Sprintf("Task %s: %02d seconds remaining...", taskID, remainingSeconds)
+				controller.DisplayChan <- fmt.Sprintf("Task -- \"%s\": %d:%02d", task.Title, remainingSeconds/60, remainingSeconds%60)
 			}
 		}
 	}
 
-	controller.DisplayChan <- fmt.Sprintf("Countdown complete for task %s. Now press (e) to exit", taskID)
-	s.UpdateTaskSpentTime(taskID, countdownMinutes*60-remainingSeconds) // Save the full duration
-	close(controller.DoneChan)                                          // Signal that the countdown has ended
+	controller.DisplayChan <- fmt.Sprintf("Countdown complete for the task -- \"%s\". Now press (e) to exit", task.Title)
+	s.UpdateTaskSpentTime(task.Id, countdownMinutes*60-remainingSeconds) // Save the full duration
+	close(controller.DoneChan)                                           // Signal that the countdown has ended
 }
 
-func (s *TaskService) UpdateTaskSpentTime(id string, spentTime int) error {
-	taskId, err := s.validateID(id)
-	if err != nil {
-		return err
-	}
+func (s *TaskService) UpdateTaskSpentTime(id int, spentTime int) error {
+	// taskId, err := s.validateID(id)
+	// if err != nil {
+	// 	return err
+	// }
 
 	tasks, err := s.readTasksFromFile()
 	if err != nil {
 		return err
 	}
 
-	index, task, err := s.findTaskById(tasks, taskId)
+	index, task, err := s.findTaskById(tasks, id)
 	if err != nil {
 		return err
 	}
@@ -195,6 +195,24 @@ func (s *TaskService) findTaskById(tasks []Task, id int) (int, *Task, error) {
 		}
 	}
 	return -1, nil, fmt.Errorf("task with ID=%d not found", id)
+}
+
+func (s *TaskService) FindTaskById(id string) (*Task, error) {
+	taskId, err := s.validateID(id)
+	if err != nil {
+		return nil, err
+	}
+	tasks, err := s.readTasksFromFile()
+	if err != nil {
+		return nil, err
+	}
+
+	_, task, err := s.findTaskById(tasks, taskId)
+	if err != nil {
+		return nil, err
+	}
+
+	return task, nil
 }
 
 func (s *TaskService) UpdateTaskStatus(id string, taskStatus TaskStatus) error {
@@ -279,6 +297,47 @@ func defineFooterText(nbOfLeftTasks, nbOfTotalTasks int) string {
 	return fmt.Sprintf("Left tasks: %d", nbOfLeftTasks)
 }
 
+func formatSpendTime(totalSpentTime int) string {
+	formattedSpendTime := ""
+
+	if totalSpentTime > 0 {
+
+		hours := totalSpentTime / 3600
+		minutes := (totalSpentTime % 3600) / 60
+		seconds := totalSpentTime % 60
+
+		if hours > 0 {
+			// find if it is plural or singular
+			if hours > 1 {
+				formattedSpendTime += fmt.Sprintf("%d hours ", hours)
+			} else {
+				formattedSpendTime += fmt.Sprintf("%d hour ", hours)
+			}
+		}
+
+		if minutes > 0 {
+			// find if it is plural or singular
+			if minutes > 1 {
+				formattedSpendTime += fmt.Sprintf("%d minutes ", minutes)
+			} else {
+				formattedSpendTime += fmt.Sprintf("%d minute ", minutes)
+			}
+		}
+
+		if seconds > 0 {
+			// find if it is plural or singular
+			if seconds > 1 {
+				formattedSpendTime += fmt.Sprintf("%d seconds ", seconds)
+			} else {
+				formattedSpendTime += fmt.Sprintf("%d second ", seconds)
+			}
+		}
+
+	}
+
+	return formattedSpendTime
+}
+
 func (s *TaskService) ListTasks(statusFilter TaskStatus) error {
 	s.table.ClearRows()
 	s.table.ClearFooter()
@@ -292,9 +351,11 @@ func (s *TaskService) ListTasks(statusFilter TaskStatus) error {
 
 	for _, task := range tasks {
 		if statusFilter == -1 || task.Status == statusFilter {
+			formatSpendTime := formatSpendTime(task.TotalSpentTime)
 			createdAt := task.CreatedAt.Format(constants.DATE_FORMAT)
 			updatedAt := task.UpdatedAt.Format(constants.DATE_FORMAT)
-			s.table.Append([]string{strconv.Itoa(task.Id), task.Title, task.Status.String(), createdAt, updatedAt, strconv.Itoa(task.TotalSpentTime)})
+
+			s.table.Append([]string{strconv.Itoa(task.Id), task.Title, task.Status.String(), createdAt, updatedAt, formatSpendTime})
 
 			if task.Status == TODO {
 				nbOfLeftTasks++
