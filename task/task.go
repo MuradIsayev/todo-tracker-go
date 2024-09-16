@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/MuradIsayev/todo-tracker/constants"
+	"github.com/MuradIsayev/todo-tracker/helpers"
+	"github.com/MuradIsayev/todo-tracker/project"
 	"github.com/olekukonko/tablewriter"
 )
 
@@ -31,18 +33,20 @@ type Task struct {
 }
 
 type TaskService struct {
-	filePath string
-	table    *tablewriter.Table
+	filePath       string
+	table          *tablewriter.Table
+	projectService *project.ProjectService
 }
 
-func NewTaskService(id string, table *tablewriter.Table) *TaskService {
+func NewTaskService(projectService *project.ProjectService, id string, table *tablewriter.Table) *TaskService {
 	table.SetHeader([]string{"ID", "Title", "Status", "Create Date", "Update Date", "Total Spent Time"})
 
 	filePath := fmt.Sprintf("%s_%s", id, constants.TASK_FILE_NAME)
 
 	return &TaskService{
-		filePath: filePath,
-		table:    table,
+		filePath:       filePath,
+		table:          table,
+		projectService: projectService,
 	}
 }
 
@@ -66,7 +70,7 @@ func NewCountdownController() *CountdownController {
 	}
 }
 
-func (s *TaskService) StartCountdown(task *Task, countdownMinutes int, controller *CountdownController) {
+func (s *TaskService) StartCountdown(task *Task, projectID string, countdownMinutes int, controller *CountdownController) {
 	remainingSeconds := countdownMinutes * 60
 
 	ticker := time.NewTicker(1 * time.Second)
@@ -76,12 +80,12 @@ func (s *TaskService) StartCountdown(task *Task, countdownMinutes int, controlle
 	for remainingSeconds > 0 {
 		select {
 		case <-controller.StopChan:
-			controller.DisplayChan <- fmt.Sprintf("Countdown stopped early for the task -- \"%s\".", task.Title)
-			s.UpdateTaskSpentTime(task.Id, countdownMinutes*60-remainingSeconds) // Save the elapsed time
-			close(controller.DoneChan)                                           // Signal that the countdown has ended
+			controller.DisplayChan <- fmt.Sprintf("Countdown stopped early for the task --> \"%s\".", task.Title)
+			s.UpdateTaskSpentTime(task.Id, projectID, countdownMinutes*60-remainingSeconds) // Save the elapsed time
+			close(controller.DoneChan)                                                      // Signal that the countdown has ended
 			return
 		case <-controller.ExitChan:
-			controller.DisplayChan <- fmt.Sprintf("Countdown session for task -- \"%s\" ignored.", task.Title)
+			controller.DisplayChan <- fmt.Sprintf("Countdown session for task --> \"%s\" ignored.", task.Title)
 			close(controller.DoneChan) // Exit without saving any time
 			return
 		case <-controller.PauseChan:
@@ -95,17 +99,20 @@ func (s *TaskService) StartCountdown(task *Task, countdownMinutes int, controlle
 		case <-ticker.C:
 			if !paused {
 				remainingSeconds--
-				controller.DisplayChan <- fmt.Sprintf("Task -- \"%s\": %d:%02d", task.Title, remainingSeconds/60, remainingSeconds%60)
+				controller.DisplayChan <- fmt.Sprintf("Task --> \"%s\": %d:%02d", task.Title, remainingSeconds/60, remainingSeconds%60)
 			}
 		}
 	}
 
-	controller.DisplayChan <- fmt.Sprintf("Countdown complete for the task -- \"%s\". Now press (e) to exit", task.Title)
-	s.UpdateTaskSpentTime(task.Id, countdownMinutes*60-remainingSeconds) // Save the full duration
-	close(controller.DoneChan)                                           // Signal that the countdown has ended
+	controller.DisplayChan <- fmt.Sprintf("Countdown complete for the task --> \"%s\". Now press (e) to exit", task.Title)
+	s.UpdateTaskSpentTime(task.Id, projectID, countdownMinutes*60-remainingSeconds) // Save the full duration
+	close(controller.DoneChan)                                                      // Signal that the countdown has ended
 }
 
-func (s *TaskService) UpdateTaskSpentTime(id int, spentTime int) error {
+func (s *TaskService) UpdateTaskSpentTime(id int, projectID string, spentTime int) error {
+	// also update the project's total spent time
+	s.projectService.UpdateTotalSpentTime(projectID, spentTime)
+
 	// taskId, err := s.validateID(id)
 	// if err != nil {
 	// 	return err
@@ -122,6 +129,9 @@ func (s *TaskService) UpdateTaskSpentTime(id int, spentTime int) error {
 	}
 
 	task.TotalSpentTime += spentTime
+	if task.Status != DONE && task.TotalSpentTime > 0 && task.Status != IN_PROGRESS {
+		task.Status = IN_PROGRESS
+	}
 	// task.UpdatedAt = time.Now()
 	tasks[index] = *task
 
@@ -297,47 +307,6 @@ func defineFooterText(nbOfLeftTasks, nbOfTotalTasks int) string {
 	return fmt.Sprintf("Left tasks: %d", nbOfLeftTasks)
 }
 
-func formatSpendTime(totalSpentTime int) string {
-	formattedSpendTime := ""
-
-	if totalSpentTime > 0 {
-
-		hours := totalSpentTime / 3600
-		minutes := (totalSpentTime % 3600) / 60
-		seconds := totalSpentTime % 60
-
-		if hours > 0 {
-			// find if it is plural or singular
-			if hours > 1 {
-				formattedSpendTime += fmt.Sprintf("%d hours ", hours)
-			} else {
-				formattedSpendTime += fmt.Sprintf("%d hour ", hours)
-			}
-		}
-
-		if minutes > 0 {
-			// find if it is plural or singular
-			if minutes > 1 {
-				formattedSpendTime += fmt.Sprintf("%d minutes ", minutes)
-			} else {
-				formattedSpendTime += fmt.Sprintf("%d minute ", minutes)
-			}
-		}
-
-		if seconds > 0 {
-			// find if it is plural or singular
-			if seconds > 1 {
-				formattedSpendTime += fmt.Sprintf("%d seconds ", seconds)
-			} else {
-				formattedSpendTime += fmt.Sprintf("%d second ", seconds)
-			}
-		}
-
-	}
-
-	return formattedSpendTime
-}
-
 func (s *TaskService) ListTasks(statusFilter TaskStatus) error {
 	s.table.ClearRows()
 	s.table.ClearFooter()
@@ -351,7 +320,7 @@ func (s *TaskService) ListTasks(statusFilter TaskStatus) error {
 
 	for _, task := range tasks {
 		if statusFilter == -1 || task.Status == statusFilter {
-			formatSpendTime := formatSpendTime(task.TotalSpentTime)
+			formatSpendTime := helpers.FormatSpendTime(task.TotalSpentTime)
 			createdAt := task.CreatedAt.Format(constants.DATE_FORMAT)
 			updatedAt := task.UpdatedAt.Format(constants.DATE_FORMAT)
 
@@ -386,11 +355,12 @@ func (s *TaskService) CreateTask(title string) error {
 	}
 
 	task := Task{
-		Id:        s.getNextID(tasks),
-		Title:     title,
-		Status:    TODO,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		Id:             s.getNextID(tasks),
+		Title:          title,
+		Status:         TODO,
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
+		TotalSpentTime: 0,
 	}
 
 	tasks = append(tasks, task)

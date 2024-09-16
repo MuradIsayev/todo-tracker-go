@@ -10,14 +10,16 @@ import (
 	"time"
 
 	"github.com/MuradIsayev/todo-tracker/constants"
+	"github.com/MuradIsayev/todo-tracker/helpers"
 	"github.com/olekukonko/tablewriter"
 )
 
 type Project struct {
-	Id        int           `json:"id"`
-	Name      string        `json:"title"`
-	Status    ProjectStatus `json:"status"`
-	CreatedAt time.Time     `json:"createdAt"`
+	Id                       int           `json:"id"`
+	Name                     string        `json:"title"`
+	Status                   ProjectStatus `json:"status"`
+	CreatedAt                time.Time     `json:"createdAt"`
+	TotalSpentTimeOfAllTasks int           `json:"totalSpentTime"`
 }
 
 type ProjectStatus int
@@ -47,7 +49,7 @@ func (projectStatus ProjectStatus) String() string {
 }
 
 func NewProjectService(filePath string, table *tablewriter.Table) *ProjectService {
-	table.SetHeader([]string{"ID", "Name", "Status", "Create Date"})
+	table.SetHeader([]string{"ID", "Name", "Status", "Create Date", "Total Spent Time"})
 
 	return &ProjectService{
 		filePath: filePath,
@@ -225,6 +227,32 @@ func (s *ProjectService) DeleteAllProjects() error {
 	return s.writeProjectsToFile(projects)
 }
 
+func (s *ProjectService) UpdateTotalSpentTime(id string, spentTime int) error {
+	projectId, err := s.validateID(id)
+	if err != nil {
+		return err
+	}
+
+	projects, err := s.readProjectsFromFile()
+	if err != nil {
+		return err
+	}
+
+	index, project, err := s.findProjectById(projects, projectId)
+	if err != nil {
+		return err
+	}
+
+	project.TotalSpentTimeOfAllTasks += spentTime
+
+	if project.Status != COMPLETED && project.TotalSpentTimeOfAllTasks > 0 && project.Status != STARTED {
+		project.Status = STARTED
+	}
+	projects[index] = *project
+
+	return s.writeProjectsToFile(projects)
+}
+
 func defineFooterText(nbOfLeftProjects, nbOfTotalProjects int) string {
 	if nbOfLeftProjects == 0 && nbOfTotalProjects == 0 {
 		return "No projects found"
@@ -244,8 +272,9 @@ func (s *ProjectService) ListProjects(statusFilter ProjectStatus) error {
 	for _, project := range projects {
 		if statusFilter == -1 || project.Status == statusFilter {
 			createdAt := project.CreatedAt.Format(constants.DATE_FORMAT)
+			totalSpentTimeOfAllTasks := helpers.FormatSpendTime(project.TotalSpentTimeOfAllTasks)
 
-			s.table.Append([]string{strconv.Itoa(project.Id), project.Name, project.Status.String(), createdAt})
+			s.table.Append([]string{strconv.Itoa(project.Id), project.Name, project.Status.String(), createdAt, totalSpentTimeOfAllTasks})
 			if project.Status == NOT_STARTED {
 				nbOfLeftprojects++
 			}
@@ -253,13 +282,14 @@ func (s *ProjectService) ListProjects(statusFilter ProjectStatus) error {
 	}
 
 	s.table.SetRowLine(true)
-	s.table.SetFooter([]string{"", "", " ", defineFooterText(nbOfLeftprojects, len(projects))})
+	s.table.SetFooter([]string{"", "", "", " ", defineFooterText(nbOfLeftprojects, len(projects))})
 	s.table.SetHeaderColor(tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
+		tablewriter.Colors{tablewriter.Bold},
 	)
-	s.table.SetFooterColor(tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold})
+	s.table.SetFooterColor(tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold})
 
 	s.table.Render()
 

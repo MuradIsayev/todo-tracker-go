@@ -1,10 +1,15 @@
 package main
 
 /*
-FIX: Fix the issue with the command line input not working properly when the timer is done.
-FIX: Find task name and utilize the name for displaying the task name in the countdown timer.
-TODO: Add total time spent for projects by summing up the time spent on each task.
+
+TODO: Make it more user friendly for the production step.
+TODO: Think of how to improve error handling.
+TODO: Reduce the repetition in the code by creating helper functions and using struct embedding more effectively.
+TODO: Add more features like sorting, filtering, and searching.
+TODO: Make more strucutred folder and file management for the task and project json files.
+TODO: Think of storing the PROJECT_ID in the task json file to make it easier to find the tasks for a specific project.
 TODO: Maybee add unit tests?
+FIX: Fix the issue with the command line input not working properly when the timer is done.
 */
 
 import (
@@ -21,12 +26,12 @@ import (
 	"github.com/olekukonko/tablewriter"
 )
 
-func startREPL(projectID string) {
+func startREPL(projectService *project.ProjectService, projectID string) {
 	fmt.Println("Welcome to the Task Management CLI - Interactive Mode")
 	reader := bufio.NewReader(os.Stdin)
 
 	taskTable := tablewriter.NewWriter(os.Stdout)
-	taskService := task.NewTaskService(projectID, taskTable)
+	taskService := task.NewTaskService(projectService, projectID, taskTable)
 
 	for {
 		fmt.Print(">>> ")
@@ -37,12 +42,12 @@ func startREPL(projectID string) {
 			break
 		}
 
-		executeCommand(input, taskService)
+		executeCommand(input, projectID, taskService)
 	}
 
 }
 
-func executeCommand(input string, taskService *task.TaskService) {
+func executeCommand(input string, projectID string, taskService *task.TaskService) {
 	parts := strings.Fields(input)
 	if len(parts) == 0 {
 		return
@@ -63,13 +68,13 @@ func executeCommand(input string, taskService *task.TaskService) {
 	case constants.MARK:
 		handleMarkCommand(args, taskService)
 	case constants.TIMER:
-		handleCountdownCommand(args, taskService)
+		handleCountdownCommand(args, projectID, taskService)
 	default:
 		fmt.Println("Unknown command:", command)
 	}
 }
 
-func handleCountdownCommand(args []string, taskService *task.TaskService) {
+func handleCountdownCommand(args []string, projectID string, taskService *task.TaskService) {
 	if len(args) != 3 {
 		fmt.Println("USAGE: t <task_id> --time <duration>")
 		return
@@ -98,7 +103,7 @@ func handleCountdownCommand(args []string, taskService *task.TaskService) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		taskService.StartCountdown(task, *timePtr, controller)
+		taskService.StartCountdown(task, projectID, *timePtr, controller)
 	}()
 
 	// Display timer updates without interrupting input
@@ -309,7 +314,7 @@ func handleREPLCommand(args []string, projectService *project.ProjectService) {
 		os.Exit(1)
 	}
 
-	startREPL(projectID)
+	startREPL(projectService, projectID)
 }
 
 func handleProjectAddCommand(args []string, projectService *project.ProjectService) {
