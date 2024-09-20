@@ -2,10 +2,8 @@ package task
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
-	"regexp"
 	"strconv"
 	"time"
 
@@ -25,11 +23,12 @@ const (
 
 type Task struct {
 	Id             int        `json:"id"`
-	Title          string     `json:"title"`
+	Name           string     `json:"name"`
 	Status         TaskStatus `json:"status"`
 	CreatedAt      time.Time  `json:"createdAt"`
 	UpdatedAt      time.Time  `json:"updatedAt"`
 	TotalSpentTime int        `json:"totalSpentTime"`
+	ProjectId      int        `json:"projectId"`
 }
 
 type TaskService struct {
@@ -38,10 +37,10 @@ type TaskService struct {
 	projectService *project.ProjectService
 }
 
-func NewTaskService(projectService *project.ProjectService, id string, table *tablewriter.Table) *TaskService {
-	table.SetHeader([]string{"ID", "Title", "Status", "Create Date", "Update Date", "Total Spent Time"})
+func NewTaskService(projectService *project.ProjectService, projectId string, table *tablewriter.Table) *TaskService {
+	table.SetHeader([]string{constants.COLUMN_ID, constants.COLUMN_NAME, constants.COLUMN_STATUS, constants.COLUMN_CREATE_DATE, constants.COLUMN_UPDATE_DATE, constants.COLUMN_TOTAL_SPENT_TIME_TASK})
 
-	filePath := fmt.Sprintf("%s_%s", id, constants.TASK_FILE_NAME)
+	filePath := fmt.Sprintf("output/tasks/%s_%s", projectId, constants.TASK_FILE_NAME)
 
 	return &TaskService{
 		filePath:       filePath,
@@ -70,7 +69,7 @@ func NewCountdownController() *CountdownController {
 	}
 }
 
-func (s *TaskService) StartCountdown(task *Task, projectID string, countdownMinutes int, controller *CountdownController) {
+func (s *TaskService) StartCountdown(task *Task, countdownMinutes int, controller *CountdownController) {
 	remainingSeconds := countdownMinutes * 60
 
 	ticker := time.NewTicker(1 * time.Second)
@@ -80,12 +79,12 @@ func (s *TaskService) StartCountdown(task *Task, projectID string, countdownMinu
 	for remainingSeconds > 0 {
 		select {
 		case <-controller.StopChan:
-			controller.DisplayChan <- fmt.Sprintf("Countdown stopped early for the task --> \"%s\".", task.Title)
-			s.UpdateTaskSpentTime(task.Id, projectID, countdownMinutes*60-remainingSeconds) // Save the elapsed time
-			close(controller.DoneChan)                                                      // Signal that the countdown has ended
+			controller.DisplayChan <- fmt.Sprintf("Countdown stopped early for the task --> \"%s\".", task.Name)
+			s.UpdateTaskSpentTime(task.Id, countdownMinutes*60-remainingSeconds) // Save the elapsed time
+			close(controller.DoneChan)                                           // Signal that the countdown has ended
 			return
 		case <-controller.ExitChan:
-			controller.DisplayChan <- fmt.Sprintf("Countdown session for task --> \"%s\" ignored.", task.Title)
+			controller.DisplayChan <- fmt.Sprintf("Countdown session for task --> \"%s\" ignored.", task.Name)
 			close(controller.DoneChan) // Exit without saving any time
 			return
 		case <-controller.PauseChan:
@@ -99,25 +98,17 @@ func (s *TaskService) StartCountdown(task *Task, projectID string, countdownMinu
 		case <-ticker.C:
 			if !paused {
 				remainingSeconds--
-				controller.DisplayChan <- fmt.Sprintf("Task --> \"%s\": %d:%02d", task.Title, remainingSeconds/60, remainingSeconds%60)
+				controller.DisplayChan <- fmt.Sprintf("Task --> \"%s\": %d:%02d", task.Name, remainingSeconds/60, remainingSeconds%60)
 			}
 		}
 	}
 
-	controller.DisplayChan <- fmt.Sprintf("Countdown complete for the task --> \"%s\". Now press (e) to exit", task.Title)
-	s.UpdateTaskSpentTime(task.Id, projectID, countdownMinutes*60-remainingSeconds) // Save the full duration
-	close(controller.DoneChan)                                                      // Signal that the countdown has ended
+	controller.DisplayChan <- fmt.Sprintf("Countdown complete for the task --> \"%s\". Now press (e) to exit", task.Name)
+	s.UpdateTaskSpentTime(task.Id, countdownMinutes*60-remainingSeconds) // Save the full duration
+	close(controller.DoneChan)                                           // Signal that the countdown has ended
 }
 
-func (s *TaskService) UpdateTaskSpentTime(id int, projectID string, spentTime int) error {
-	// also update the project's total spent time
-	s.projectService.UpdateTotalSpentTime(projectID, spentTime)
-
-	// taskId, err := s.validateID(id)
-	// if err != nil {
-	// 	return err
-	// }
-
+func (s *TaskService) UpdateTaskSpentTime(id int, spentTime int) error {
 	tasks, err := s.readTasksFromFile()
 	if err != nil {
 		return err
@@ -128,6 +119,8 @@ func (s *TaskService) UpdateTaskSpentTime(id int, projectID string, spentTime in
 		return err
 	}
 
+	// also update the project's total spent time
+	s.projectService.UpdateTotalSpentTime(task.ProjectId, spentTime)
 	task.TotalSpentTime += spentTime
 	if task.Status != DONE && task.TotalSpentTime > 0 && task.Status != IN_PROGRESS {
 		task.Status = IN_PROGRESS
@@ -188,16 +181,6 @@ func (s *TaskService) getNextID(tasks []Task) int {
 	return tasks[len(tasks)-1].Id + 1
 }
 
-func (s *TaskService) validateID(id string) (int, error) {
-	var numberRegex = regexp.MustCompile(`^[0-9]+$`)
-
-	if !numberRegex.MatchString(id) {
-		return 0, errors.New("ID must only contain digits")
-	}
-
-	return strconv.Atoi(id)
-}
-
 func (s *TaskService) findTaskById(tasks []Task, id int) (int, *Task, error) {
 	for i, task := range tasks {
 		if task.Id == id {
@@ -208,7 +191,7 @@ func (s *TaskService) findTaskById(tasks []Task, id int) (int, *Task, error) {
 }
 
 func (s *TaskService) FindTaskById(id string) (*Task, error) {
-	taskId, err := s.validateID(id)
+	taskId, err := helpers.ValidateIdAndConvertToInt(id)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +209,7 @@ func (s *TaskService) FindTaskById(id string) (*Task, error) {
 }
 
 func (s *TaskService) UpdateTaskStatus(id string, taskStatus TaskStatus) error {
-	taskId, err := s.validateID(id)
+	taskId, err := helpers.ValidateIdAndConvertToInt(id)
 	if err != nil {
 		return err
 	}
@@ -247,8 +230,8 @@ func (s *TaskService) UpdateTaskStatus(id string, taskStatus TaskStatus) error {
 
 	return s.writeTasksToFile(tasks)
 }
-func (s *TaskService) UpdateTaskTitle(id, title string) error {
-	taskId, err := s.validateID(id)
+func (s *TaskService) UpdateTaskName(id, name string) error {
+	taskId, err := helpers.ValidateIdAndConvertToInt(id)
 	if err != nil {
 		return err
 	}
@@ -263,8 +246,8 @@ func (s *TaskService) UpdateTaskTitle(id, title string) error {
 		return err
 	}
 
-	if title != "" {
-		task.Title = title
+	if name != "" {
+		task.Name = name
 		task.UpdatedAt = time.Now()
 		tasks[index] = *task
 	}
@@ -273,7 +256,7 @@ func (s *TaskService) UpdateTaskTitle(id, title string) error {
 }
 
 func (s *TaskService) DeleteTask(id string) error {
-	taskId, err := s.validateID(id)
+	taskId, err := helpers.ValidateIdAndConvertToInt(id)
 	if err != nil {
 		return err
 	}
@@ -324,7 +307,7 @@ func (s *TaskService) ListTasks(statusFilter TaskStatus) error {
 			createdAt := task.CreatedAt.Format(constants.DATE_FORMAT)
 			updatedAt := task.UpdatedAt.Format(constants.DATE_FORMAT)
 
-			s.table.Append([]string{strconv.Itoa(task.Id), task.Title, task.Status.String(), createdAt, updatedAt, formatSpendTime})
+			s.table.Append([]string{strconv.Itoa(task.Id), task.Name, task.Status.String(), createdAt, updatedAt, formatSpendTime})
 
 			if task.Status == TODO {
 				nbOfLeftTasks++
@@ -348,19 +331,25 @@ func (s *TaskService) ListTasks(statusFilter TaskStatus) error {
 	return nil
 }
 
-func (s *TaskService) CreateTask(title string) error {
+func (s *TaskService) CreateTask(projectID string, name string) error {
 	tasks, err := s.readTasksFromFile()
+	if err != nil {
+		return err
+	}
+
+	projectId, err := helpers.ValidateIdAndConvertToInt(projectID)
 	if err != nil {
 		return err
 	}
 
 	task := Task{
 		Id:             s.getNextID(tasks),
-		Title:          title,
+		Name:           name,
 		Status:         TODO,
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
 		TotalSpentTime: 0,
+		ProjectId:      projectId,
 	}
 
 	tasks = append(tasks, task)

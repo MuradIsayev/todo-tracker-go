@@ -2,10 +2,8 @@ package project
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
-	"regexp"
 	"strconv"
 	"time"
 
@@ -14,14 +12,6 @@ import (
 	"github.com/olekukonko/tablewriter"
 )
 
-type Project struct {
-	Id                       int           `json:"id"`
-	Name                     string        `json:"title"`
-	Status                   ProjectStatus `json:"status"`
-	CreatedAt                time.Time     `json:"createdAt"`
-	TotalSpentTimeOfAllTasks int           `json:"totalSpentTime"`
-}
-
 type ProjectStatus int
 
 const (
@@ -29,6 +19,14 @@ const (
 	STARTED
 	COMPLETED
 )
+
+type Project struct {
+	Id                       int           `json:"id"`
+	Name                     string        `json:"name"`
+	Status                   ProjectStatus `json:"status"`
+	CreatedAt                time.Time     `json:"createdAt"`
+	TotalSpentTimeOfAllTasks int           `json:"totalSpentTime"`
+}
 
 type ProjectService struct {
 	filePath string
@@ -49,7 +47,7 @@ func (projectStatus ProjectStatus) String() string {
 }
 
 func NewProjectService(filePath string, table *tablewriter.Table) *ProjectService {
-	table.SetHeader([]string{"ID", "Name", "Status", "Create Date", "Total Spent Time"})
+	table.SetHeader([]string{constants.COLUMN_ID, constants.COLUMN_NAME, constants.COLUMN_STATUS, constants.COLUMN_CREATE_DATE, constants.COLUMN_TOTAL_SPENT_TIME})
 
 	return &ProjectService{
 		filePath: filePath,
@@ -96,7 +94,7 @@ func (s *ProjectService) writeProjectsToFile(projects []Project) error {
 }
 
 func (s *ProjectService) UpdateProjectStatus(id string, projectStatus ProjectStatus) error {
-	projectId, err := s.validateID(id)
+	projectId, err := helpers.ValidateIdAndConvertToInt(id)
 	if err != nil {
 		return err
 	}
@@ -119,7 +117,7 @@ func (s *ProjectService) UpdateProjectStatus(id string, projectStatus ProjectSta
 }
 
 func (s *ProjectService) UpdateProjectName(id, name string) error {
-	projectId, err := s.validateID(id)
+	projectId, err := helpers.ValidateIdAndConvertToInt(id)
 	if err != nil {
 		return err
 	}
@@ -161,18 +159,8 @@ func (s *ProjectService) CreateProject(name string) error {
 	return s.writeProjectsToFile(projects)
 }
 
-func (s *ProjectService) validateID(id string) (int, error) {
-	var numberRegex = regexp.MustCompile(`^[0-9]+$`)
-
-	if !numberRegex.MatchString(id) {
-		return 0, errors.New("ID must only contain digits")
-	}
-
-	return strconv.Atoi(id)
-}
-
 func (s *ProjectService) IsProjectExists(id string) bool {
-	projectId, err := s.validateID(id)
+	projectId, err := helpers.ValidateIdAndConvertToInt(id)
 	if err != nil {
 		return false
 	}
@@ -201,7 +189,7 @@ func (s *ProjectService) findProjectById(projects []Project, id int) (int, *Proj
 }
 
 func (s *ProjectService) DeleteProject(id string) error {
-	projectId, err := s.validateID(id)
+	projectId, err := helpers.ValidateIdAndConvertToInt(id)
 	if err != nil {
 		return err
 	}
@@ -227,18 +215,13 @@ func (s *ProjectService) DeleteAllProjects() error {
 	return s.writeProjectsToFile(projects)
 }
 
-func (s *ProjectService) UpdateTotalSpentTime(id string, spentTime int) error {
-	projectId, err := s.validateID(id)
-	if err != nil {
-		return err
-	}
-
+func (s *ProjectService) UpdateTotalSpentTime(id int, spentTime int) error {
 	projects, err := s.readProjectsFromFile()
 	if err != nil {
 		return err
 	}
 
-	index, project, err := s.findProjectById(projects, projectId)
+	index, project, err := s.findProjectById(projects, id)
 	if err != nil {
 		return err
 	}

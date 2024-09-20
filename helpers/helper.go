@@ -1,6 +1,21 @@
 package helpers
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+	"regexp"
+	"strconv"
+)
+
+func ValidateIdAndConvertToInt(id string) (int, error) {
+	var numberRegex = regexp.MustCompile(`^[0-9]+$`)
+
+	if !numberRegex.MatchString(id) {
+		return 0, errors.New("ID must only contain digits")
+	}
+
+	return strconv.Atoi(id)
+}
 
 func FormatSpendTime(totalSpentTime int) string {
 	formattedSpendTime := ""

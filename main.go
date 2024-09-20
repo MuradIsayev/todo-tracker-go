@@ -2,12 +2,10 @@ package main
 
 /*
 
-TODO: Make it more user friendly for the production step.
-TODO: Think of how to improve error handling.
 TODO: Reduce the repetition in the code by creating helper functions and using struct embedding more effectively.
+TODO: Think of how to improve error handling.
 TODO: Add more features like sorting, filtering, and searching.
-TODO: Make more strucutred folder and file management for the task and project json files.
-TODO: Think of storing the PROJECT_ID in the task json file to make it easier to find the tasks for a specific project.
+TODO: Make it more user friendly for the production step.
 TODO: Maybee add unit tests?
 FIX: Fix the issue with the command line input not working properly when the timer is done.
 */
@@ -58,7 +56,7 @@ func executeCommand(input string, projectID string, taskService *task.TaskServic
 
 	switch command {
 	case constants.ADD:
-		handleAddCommand(args, taskService)
+		handleAddCommand(args, projectID, taskService)
 	case constants.LIST:
 		handleListCommand(args, taskService)
 	case constants.UPDATE:
@@ -68,13 +66,13 @@ func executeCommand(input string, projectID string, taskService *task.TaskServic
 	case constants.MARK:
 		handleMarkCommand(args, taskService)
 	case constants.TIMER:
-		handleCountdownCommand(args, projectID, taskService)
+		handleCountdownCommand(args, taskService)
 	default:
 		fmt.Println("Unknown command:", command)
 	}
 }
 
-func handleCountdownCommand(args []string, projectID string, taskService *task.TaskService) {
+func handleCountdownCommand(args []string, taskService *task.TaskService) {
 	if len(args) != 3 {
 		fmt.Println("USAGE: t <task_id> --time <duration>")
 		return
@@ -103,7 +101,7 @@ func handleCountdownCommand(args []string, projectID string, taskService *task.T
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		taskService.StartCountdown(task, projectID, *timePtr, controller)
+		taskService.StartCountdown(task, *timePtr, controller)
 	}()
 
 	// Display timer updates without interrupting input
@@ -136,14 +134,14 @@ func handleCountdownCommand(args []string, projectID string, taskService *task.T
 		default:
 			// Handle user commands from input
 			switch input {
-			case "p":
+			case constants.TIMER_PAUSE:
 				controller.PauseChan <- true
-			case "r":
+			case constants.TIMER_RESUME:
 				controller.ResumeChan <- true
-			case "s":
+			case constants.TIMER_STOP:
 				controller.StopChan <- true // Stop and update the task time
 				return
-			case "e":
+			case constants.TIMER_EXIT:
 				fmt.Println("Exiting timer mode without saving time.")
 				controller.ExitChan <- true // Exit without updating the task time
 				return
@@ -163,14 +161,14 @@ func printControls() {
 	fmt.Print("\0338")                                                                                              // Restore cursor position
 }
 
-func handleAddCommand(args []string, taskService *task.TaskService) {
+func handleAddCommand(args []string, projectID string, taskService *task.TaskService) {
 	if len(args) < 1 {
 		fmt.Println("USAGE: add <task_name>")
 		return
 	}
 
-	taskTitle := strings.Join(args, " ")
-	if err := taskService.CreateTask(taskTitle); err != nil {
+	taskName := strings.Join(args, " ")
+	if err := taskService.CreateTask(projectID, taskName); err != nil {
 		fmt.Println("Error:", err)
 	}
 }
@@ -206,7 +204,7 @@ func handleUpdateCommand(args []string, taskService *task.TaskService) {
 		return
 	}
 
-	if err := taskService.UpdateTaskTitle(args[0], args[1]); err != nil {
+	if err := taskService.UpdateTaskName(args[0], args[1]); err != nil {
 		fmt.Println("Error:", err)
 	}
 }
