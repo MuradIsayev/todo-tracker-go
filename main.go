@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	"github.com/MuradIsayev/todo-tracker/constants"
+	"github.com/MuradIsayev/todo-tracker/countdown"
 	"github.com/MuradIsayev/todo-tracker/project"
 	"github.com/MuradIsayev/todo-tracker/task"
 	"github.com/olekukonko/tablewriter"
@@ -87,11 +88,11 @@ func handleCountdownCommand(args []string, taskService *task.TaskService) {
 	}
 
 	taskID := args[0]
-	controller := task.NewCountdownController()
+	countdownService := countdown.NewCountdownService(taskService)
 
 	task, err := taskService.FindTaskById(taskID)
 	if err != nil {
-		fmt.Println("Error:", err)
+		fmt.Println(err)
 		return
 	}
 
@@ -101,14 +102,14 @@ func handleCountdownCommand(args []string, taskService *task.TaskService) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		taskService.StartCountdown(task, *timePtr, controller)
+		countdownService.StartCountdown(task, *timePtr)
 	}()
 
 	// Display timer updates without interrupting input
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for displayMsg := range controller.DisplayChan {
+		for displayMsg := range countdownService.DisplayChan {
 			fmt.Print("\0337")                           // Save cursor position
 			fmt.Printf("\033[1A\033[2K\r%s", displayMsg) // Clear timer line, print new time
 			fmt.Print("\0338")                           // Restore cursor position
@@ -129,21 +130,21 @@ func handleCountdownCommand(args []string, taskService *task.TaskService) {
 		input = strings.TrimSpace(strings.ToLower(input))
 
 		select {
-		case <-controller.DoneChan:
+		case <-countdownService.DoneChan:
 			return
 		default:
 			// Handle user commands from input
 			switch input {
 			case constants.TIMER_PAUSE:
-				controller.PauseChan <- true
+				countdownService.PauseChan <- true
 			case constants.TIMER_RESUME:
-				controller.ResumeChan <- true
+				countdownService.ResumeChan <- true
 			case constants.TIMER_STOP:
-				controller.StopChan <- true // Stop and update the task time
+				countdownService.StopChan <- true // Stop and update the task time
 				return
 			case constants.TIMER_EXIT:
 				fmt.Println("Exiting timer mode without saving time.")
-				controller.ExitChan <- true // Exit without updating the task time
+				countdownService.ExitChan <- true // Exit without updating the task time
 				return
 			default:
 				fmt.Print("\0337")                                                                         // Save cursor position
