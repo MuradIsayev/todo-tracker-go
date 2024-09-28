@@ -1,56 +1,51 @@
 package task
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"strconv"
 	"time"
 
+	"github.com/MuradIsayev/todo-tracker/base"
 	"github.com/MuradIsayev/todo-tracker/constants"
 	"github.com/MuradIsayev/todo-tracker/helpers"
 	"github.com/MuradIsayev/todo-tracker/project"
+	"github.com/MuradIsayev/todo-tracker/status"
 	"github.com/olekukonko/tablewriter"
 )
 
-type TaskStatus int
-
-const (
-	TODO TaskStatus = iota
-	IN_PROGRESS
-	DONE
-)
-
 type Task struct {
-	Id             int        `json:"id"`
-	Name           string     `json:"name"`
-	Status         TaskStatus `json:"status"`
-	CreatedAt      time.Time  `json:"createdAt"`
-	UpdatedAt      time.Time  `json:"updatedAt"`
-	TotalSpentTime int        `json:"totalSpentTime"`
-	ProjectId      int        `json:"projectId"`
+	Id             int               `json:"id"`
+	Name           string            `json:"name"`
+	Status         status.ItemStatus `json:"status"`
+	CreatedAt      time.Time         `json:"createdAt"`
+	UpdatedAt      time.Time         `json:"updatedAt"`
+	TotalSpentTime int               `json:"totalSpentTime"`
+	ProjectId      int               `json:"projectId"`
 }
 
 type TaskService struct {
-	filePath       string
+	baseService    *base.BaseService
 	table          *tablewriter.Table
 	projectService *project.ProjectService
 }
 
 func NewTaskService(projectService *project.ProjectService, projectId string, table *tablewriter.Table) *TaskService {
-	table.SetHeader([]string{constants.COLUMN_ID, constants.COLUMN_NAME, constants.COLUMN_STATUS, constants.COLUMN_CREATE_DATE, constants.COLUMN_UPDATE_DATE, constants.COLUMN_TOTAL_SPENT_TIME_TASK})
-
 	filePath := fmt.Sprintf("output/tasks/%s_%s", projectId, constants.TASK_FILE_NAME)
 
+	table.SetHeader([]string{constants.COLUMN_ID, constants.COLUMN_NAME, constants.COLUMN_STATUS, constants.COLUMN_CREATE_DATE, constants.COLUMN_UPDATE_DATE, constants.COLUMN_TOTAL_SPENT_TIME_TASK})
+
 	return &TaskService{
-		filePath:       filePath,
 		table:          table,
 		projectService: projectService,
+		baseService: &base.BaseService{
+			FilePath: filePath,
+		},
 	}
 }
 
 func (s *TaskService) UpdateTaskSpentTime(id int, spentTime int) error {
-	tasks, err := s.readTasksFromFile()
+	tasks := []Task{}
+	err := s.baseService.ReadFromFile(&tasks)
 	if err != nil {
 		return err
 	}
@@ -60,66 +55,14 @@ func (s *TaskService) UpdateTaskSpentTime(id int, spentTime int) error {
 		return err
 	}
 
-	// also update the project's total spent time
 	s.projectService.UpdateTotalSpentTime(task.ProjectId, spentTime)
 	task.TotalSpentTime += spentTime
-	if task.Status != DONE && task.TotalSpentTime > 0 && task.Status != IN_PROGRESS {
-		task.Status = IN_PROGRESS
+	if task.Status != status.DONE && task.TotalSpentTime > 0 && task.Status != status.IN_PROGRESS {
+		task.Status = status.IN_PROGRESS
 	}
-	// task.UpdatedAt = time.Now()
+
 	tasks[index] = *task
-
-	return s.writeTasksToFile(tasks)
-}
-
-func (taskStatus TaskStatus) String() string {
-	switch taskStatus {
-	case TODO:
-		return "TODO"
-	case IN_PROGRESS:
-		return "IN_PROGRESS"
-	case DONE:
-		return "DONE"
-	default:
-		return "UNKNOWN"
-	}
-}
-
-func (s *TaskService) readTasksFromFile() ([]Task, error) {
-	fileContent, err := os.ReadFile(s.filePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return []Task{}, nil
-		}
-		return nil, fmt.Errorf("cannot read file: %v", err)
-	}
-
-	var tasks []Task
-	if len(fileContent) > 0 {
-		if err := json.Unmarshal(fileContent, &tasks); err != nil {
-			return nil, fmt.Errorf("cannot convert JSON to struct: %v", err)
-		}
-	}
-	return tasks, nil
-}
-
-func (s *TaskService) writeTasksToFile(tasks []Task) error {
-	newTasks, err := json.Marshal(tasks)
-	if err != nil {
-		return fmt.Errorf("Cannot convert Struct to JSON: %v", err)
-	}
-
-	if err := os.WriteFile(s.filePath, newTasks, 0644); err != nil {
-		return fmt.Errorf("cannot write to file: %v", err)
-	}
-	return nil
-}
-
-func (s *TaskService) getNextID(tasks []Task) int {
-	if len(tasks) == 0 {
-		return 1
-	}
-	return tasks[len(tasks)-1].Id + 1
+	return s.baseService.WriteToFile(tasks)
 }
 
 func findTaskById(tasks []Task, id int) (int, *Task, error) {
@@ -136,7 +79,9 @@ func (s *TaskService) FindTaskById(id string) (*Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	tasks, err := s.readTasksFromFile()
+
+	tasks := []Task{}
+	err = s.baseService.ReadFromFile(&tasks)
 	if err != nil {
 		return nil, err
 	}
@@ -149,13 +94,14 @@ func (s *TaskService) FindTaskById(id string) (*Task, error) {
 	return task, nil
 }
 
-func (s *TaskService) UpdateTaskStatus(id string, taskStatus TaskStatus) error {
+func (s *TaskService) UpdateTaskStatus(id string, taskStatus status.ItemStatus) error {
 	taskId, err := helpers.ValidateIdAndConvertToInt(id)
 	if err != nil {
 		return err
 	}
 
-	tasks, err := s.readTasksFromFile()
+	tasks := []Task{}
+	err = s.baseService.ReadFromFile(&tasks)
 	if err != nil {
 		return err
 	}
@@ -169,15 +115,17 @@ func (s *TaskService) UpdateTaskStatus(id string, taskStatus TaskStatus) error {
 	task.UpdatedAt = time.Now()
 	tasks[index] = *task
 
-	return s.writeTasksToFile(tasks)
+	return s.baseService.WriteToFile(tasks)
 }
+
 func (s *TaskService) UpdateTaskName(id, name string) error {
 	taskId, err := helpers.ValidateIdAndConvertToInt(id)
 	if err != nil {
 		return err
 	}
 
-	tasks, err := s.readTasksFromFile()
+	tasks := []Task{}
+	err = s.baseService.ReadFromFile(&tasks)
 	if err != nil {
 		return err
 	}
@@ -192,8 +140,7 @@ func (s *TaskService) UpdateTaskName(id, name string) error {
 		task.UpdatedAt = time.Now()
 		tasks[index] = *task
 	}
-
-	return s.writeTasksToFile(tasks)
+	return s.baseService.WriteToFile(tasks)
 }
 
 func (s *TaskService) DeleteTask(id string) error {
@@ -202,7 +149,8 @@ func (s *TaskService) DeleteTask(id string) error {
 		return err
 	}
 
-	tasks, err := s.readTasksFromFile()
+	tasks := []Task{}
+	err = s.baseService.ReadFromFile(&tasks)
 	if err != nil {
 		return err
 	}
@@ -214,13 +162,13 @@ func (s *TaskService) DeleteTask(id string) error {
 
 	tasks = append(tasks[:index], tasks[index+1:]...)
 
-	return s.writeTasksToFile(tasks)
+	return s.baseService.WriteToFile(tasks)
 }
 
 func (s *TaskService) DeleteAllTasks() error {
 	var tasks []Task
 
-	return s.writeTasksToFile(tasks)
+	return s.baseService.WriteToFile(tasks)
 }
 
 func defineFooterText(nbOfLeftTasks, nbOfTotalTasks int) string {
@@ -231,11 +179,12 @@ func defineFooterText(nbOfLeftTasks, nbOfTotalTasks int) string {
 	return fmt.Sprintf("Left tasks: %d", nbOfLeftTasks)
 }
 
-func (s *TaskService) ListTasks(statusFilter TaskStatus) error {
+func (s *TaskService) ListTasks(statusFilter status.ItemStatus) error {
 	s.table.ClearRows()
 	s.table.ClearFooter()
 
-	tasks, err := s.readTasksFromFile()
+	tasks := []Task{}
+	err := s.baseService.ReadFromFile(&tasks)
 	if err != nil {
 		return err
 	}
@@ -250,7 +199,7 @@ func (s *TaskService) ListTasks(statusFilter TaskStatus) error {
 
 			s.table.Append([]string{strconv.Itoa(task.Id), task.Name, task.Status.String(), createdAt, updatedAt, formatSpendTime})
 
-			if task.Status == TODO {
+			if task.Status == status.TODO {
 				nbOfLeftTasks++
 			}
 		}
@@ -273,7 +222,9 @@ func (s *TaskService) ListTasks(statusFilter TaskStatus) error {
 }
 
 func (s *TaskService) CreateTask(projectID string, name string) error {
-	tasks, err := s.readTasksFromFile()
+	tasks := []Task{}
+	err := s.baseService.ReadFromFile(&tasks)
+
 	if err != nil {
 		return err
 	}
@@ -284,9 +235,9 @@ func (s *TaskService) CreateTask(projectID string, name string) error {
 	}
 
 	task := Task{
-		Id:             s.getNextID(tasks),
+		Id:             s.baseService.GetNextID(tasks),
 		Name:           name,
-		Status:         TODO,
+		Status:         status.TODO,
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
 		TotalSpentTime: 0,
@@ -295,5 +246,5 @@ func (s *TaskService) CreateTask(projectID string, name string) error {
 
 	tasks = append(tasks, task)
 
-	return s.writeTasksToFile(tasks)
+	return s.baseService.WriteToFile(tasks)
 }

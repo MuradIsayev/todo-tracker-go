@@ -21,6 +21,7 @@ import (
 	"github.com/MuradIsayev/todo-tracker/constants"
 	"github.com/MuradIsayev/todo-tracker/countdown"
 	"github.com/MuradIsayev/todo-tracker/project"
+	"github.com/MuradIsayev/todo-tracker/status"
 	"github.com/MuradIsayev/todo-tracker/task"
 	"github.com/olekukonko/tablewriter"
 )
@@ -182,14 +183,14 @@ func handleListCommand(args []string, taskService *task.TaskService) {
 
 	listCommand.Parse(args)
 
-	var statusFilter task.TaskStatus
+	var statusFilter status.ItemStatus
 	switch {
 	case *listDone:
-		statusFilter = task.DONE
+		statusFilter = status.DONE
 	case *listInProgress:
-		statusFilter = task.IN_PROGRESS
+		statusFilter = status.IN_PROGRESS
 	case *listTodo:
-		statusFilter = task.TODO
+		statusFilter = status.TODO
 	default:
 		statusFilter = -1
 	}
@@ -255,20 +256,20 @@ func handleMarkCommand(args []string, taskService *task.TaskService) {
 	}
 
 	// Determine the task status based on the parsed flags
-	var status task.TaskStatus
+	var statusFilter status.ItemStatus
 	switch {
 	case *markDone:
-		status = task.DONE
+		statusFilter = status.DONE
 	case *markInProgress:
-		status = task.IN_PROGRESS
+		statusFilter = status.IN_PROGRESS
 	case *markTodo:
-		status = task.TODO
+		statusFilter = status.TODO
 	default:
 		fmt.Println("Invalid status. Use --done, --in-progress, or --todo.")
 		return
 	}
 
-	if err := taskService.UpdateTaskStatus(taskID, status); err != nil {
+	if err := taskService.UpdateTaskStatus(taskID, statusFilter); err != nil {
 		fmt.Println("Error:", err)
 	}
 }
@@ -330,20 +331,21 @@ func handleProjectAddCommand(args []string, projectService *project.ProjectServi
 
 func handleProjectListCommand(args []string, projectService *project.ProjectService) {
 	listCommand := flag.NewFlagSet(constants.LIST, flag.ExitOnError)
-	listCompleted := listCommand.Bool("completed", false, "List projects with status COMPLETED")
-	listStarted := listCommand.Bool("started", false, "List projects with status STARTED")
-	listNotStarted := listCommand.Bool("not-started", false, "List projects with status NOT_STARTED")
+
+	listDone := listCommand.Bool("done", false, "List projects with status DONE")
+	listInProgress := listCommand.Bool("in-progress", false, "List projects with status IN_PROGRESS")
+	listTodo := listCommand.Bool("todo", false, "List projects with status TODO")
 
 	listCommand.Parse(args)
 
-	var statusFilter project.ProjectStatus
+	var statusFilter status.ItemStatus
 	switch {
-	case *listCompleted:
-		statusFilter = project.COMPLETED
-	case *listStarted:
-		statusFilter = project.STARTED
-	case *listNotStarted:
-		statusFilter = project.NOT_STARTED
+	case *listDone:
+		statusFilter = status.DONE
+	case *listInProgress:
+		statusFilter = status.IN_PROGRESS
+	case *listTodo:
+		statusFilter = status.TODO
 	default:
 		statusFilter = -1
 	}
@@ -397,9 +399,9 @@ func handleProjectMarkCommand(args []string, projectService *project.ProjectServ
 	markCommand := flag.NewFlagSet("mark", flag.ExitOnError)
 
 	// Define the flags
-	markProjectCompleted := markCommand.Bool("completed", false, "Mark task as COMPLETED")
-	markProjectStarted := markCommand.Bool("started", false, "Mark task as STARTED")
-	markProjectNotStarted := markCommand.Bool("not-started", false, "Mark task as NOT_STARTED")
+	markProjectDone := markCommand.Bool("done", false, "Mark project as DONE")
+	markProjectInProgress := markCommand.Bool("in-progress", false, "Mark project as IN_PROGRESS")
+	markProjectTodo := markCommand.Bool("todo", false, "Mark project as TODO")
 
 	// Parse the remaining args after extracting the task ID
 	err := markCommand.Parse(args[1:])
@@ -408,20 +410,20 @@ func handleProjectMarkCommand(args []string, projectService *project.ProjectServ
 		return
 	}
 
-	var status project.ProjectStatus
+	var statusFilter status.ItemStatus
 	switch {
-	case *markProjectCompleted:
-		status = project.COMPLETED
-	case *markProjectStarted:
-		status = project.STARTED
-	case *markProjectNotStarted:
-		status = project.NOT_STARTED
+	case *markProjectDone:
+		statusFilter = status.DONE
+	case *markProjectInProgress:
+		statusFilter = status.IN_PROGRESS
+	case *markProjectTodo:
+		statusFilter = status.TODO
 	default:
 		fmt.Println("Invalid status. Use --completed, --started, or --not-started.")
 		return
 	}
 
-	if err := projectService.UpdateProjectStatus(projectID, status); err != nil {
+	if err := projectService.UpdateProjectStatus(projectID, statusFilter); err != nil {
 		fmt.Println("Error:", err)
 	}
 }
