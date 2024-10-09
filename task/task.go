@@ -24,7 +24,7 @@ type Task struct {
 }
 
 type TaskService struct {
-	baseService    *base.BaseService
+	baseService    *base.BaseService[Task]
 	table          *tablewriter.Table
 	projectService *project.ProjectService
 }
@@ -37,7 +37,7 @@ func NewTaskService(projectService *project.ProjectService, projectId string, ta
 	return &TaskService{
 		table:          table,
 		projectService: projectService,
-		baseService: &base.BaseService{
+		baseService: &base.BaseService[Task]{
 			FilePath: filePath,
 		},
 	}
@@ -166,12 +166,10 @@ func (s *TaskService) DeleteTask(id string) error {
 }
 
 func (s *TaskService) DeleteAllTasks() error {
-	var tasks []Task
-
-	return s.baseService.WriteToFile(tasks)
+	return s.baseService.DeleteAllItems()
 }
 
-func defineFooterText(nbOfLeftTasks, nbOfTotalTasks int) string {
+func defineTableFooterText(nbOfLeftTasks, nbOfTotalTasks int) string {
 	if nbOfLeftTasks == 0 && nbOfTotalTasks == 0 {
 		return "No tasks found"
 	}
@@ -206,7 +204,7 @@ func (s *TaskService) ListTasks(statusFilter status.ItemStatus) error {
 	}
 
 	s.table.SetRowLine(true)
-	s.table.SetFooter([]string{"", "", "", "", " ", defineFooterText(nbOfLeftTasks, len(tasks))})
+	s.table.SetFooter([]string{"", "", "", "", " ", defineTableFooterText(nbOfLeftTasks, len(tasks))})
 	s.table.SetHeaderColor(tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},

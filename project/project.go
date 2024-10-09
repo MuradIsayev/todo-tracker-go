@@ -21,7 +21,7 @@ type Project struct {
 }
 
 type ProjectService struct {
-	baseService *base.BaseService
+	baseService *base.BaseService[Project]
 	table       *tablewriter.Table
 }
 
@@ -30,7 +30,7 @@ func NewProjectService(filePath string, table *tablewriter.Table) *ProjectServic
 
 	return &ProjectService{
 		table: table,
-		baseService: &base.BaseService{
+		baseService: &base.BaseService[Project]{
 			FilePath: filePath,
 		},
 	}
@@ -158,9 +158,7 @@ func (s *ProjectService) DeleteProject(id string) error {
 }
 
 func (s *ProjectService) DeleteAllProjects() error {
-	var projects []Project
-
-	return s.baseService.WriteToFile(projects)
+	return s.baseService.DeleteAllItems()
 }
 
 func (s *ProjectService) UpdateTotalSpentTime(id int, spentTime int) error {
