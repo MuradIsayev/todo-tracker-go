@@ -17,6 +17,7 @@ type Project struct {
 	Name                     string            `json:"name"`
 	Status                   status.ItemStatus `json:"status"`
 	CreatedAt                time.Time         `json:"createdAt"`
+	UpdatedAt                time.Time         `json:"updatedAt"`
 	TotalSpentTimeOfAllTasks int               `json:"totalSpentTime"`
 }
 
@@ -26,7 +27,7 @@ type ProjectService struct {
 }
 
 func NewProjectService(filePath string, table *tablewriter.Table) *ProjectService {
-	table.SetHeader([]string{constants.COLUMN_ID, constants.COLUMN_NAME, constants.COLUMN_STATUS, constants.COLUMN_CREATE_DATE, constants.COLUMN_TOTAL_SPENT_TIME})
+	table.SetHeader([]string{constants.COLUMN_ID, constants.COLUMN_NAME, constants.COLUMN_STATUS, constants.COLUMN_CREATE_DATE, constants.COLUMN_UPDATE_DATE, constants.COLUMN_TOTAL_SPENT_TIME})
 
 	return &ProjectService{
 		table: table,
@@ -37,53 +38,19 @@ func NewProjectService(filePath string, table *tablewriter.Table) *ProjectServic
 }
 
 func (s *ProjectService) UpdateProjectStatus(id string, projectStatus status.ItemStatus) error {
-	projectId, err := helpers.ValidateIdAndConvertToInt(id)
-	if err != nil {
-		return err
-	}
-
-	projects := []Project{}
-	err = s.baseService.ReadFromFile(&projects)
-	if err != nil {
-		return err
-	}
-
-	index, project, err := s.findProjectById(projects, projectId)
-	if err != nil {
-		return err
-	}
-
-	project.Status = projectStatus
-	// project.UpdatedAt = time.Now()
-	projects[index] = *project
-
-	return s.baseService.WriteToFile(projects)
+	return s.baseService.UpdateItemStatus(id, projectStatus)
 }
 
 func (s *ProjectService) UpdateProjectName(id, name string) error {
-	projectId, err := helpers.ValidateIdAndConvertToInt(id)
-	if err != nil {
-		return err
-	}
+	return s.baseService.UpdateItemName(id, name)
+}
 
-	projects := []Project{}
-	err = s.baseService.ReadFromFile(&projects)
-	if err != nil {
-		return err
-	}
+func (s *ProjectService) DeleteProject(id string) error {
+	return s.baseService.DeleteItem(id)
+}
 
-	index, project, err := s.findProjectById(projects, projectId)
-	if err != nil {
-		return err
-	}
-
-	if name != "" {
-		project.Name = name
-		// project.UpdatedAt = time.Now()
-		projects[index] = *project
-	}
-
-	return s.baseService.WriteToFile(projects)
+func (s *ProjectService) DeleteAllProjects() error {
+	return s.baseService.DeleteAllItems()
 }
 
 func (s *ProjectService) CreateProject(name string) error {
@@ -98,6 +65,7 @@ func (s *ProjectService) CreateProject(name string) error {
 		Name:      name,
 		Status:    status.TODO,
 		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 
 	projects = append(projects, project)
@@ -126,41 +94,6 @@ func (s *ProjectService) IsProjectExists(id string) bool {
 	return false
 }
 
-func (s *ProjectService) findProjectById(projects []Project, id int) (int, *Project, error) {
-	for i, project := range projects {
-		if project.Id == id {
-			return i, &project, nil
-		}
-	}
-	return -1, nil, fmt.Errorf("project with ID=%d not found", id)
-}
-
-func (s *ProjectService) DeleteProject(id string) error {
-	projectId, err := helpers.ValidateIdAndConvertToInt(id)
-	if err != nil {
-		return err
-	}
-
-	projects := []Project{}
-	err = s.baseService.ReadFromFile(&projects)
-	if err != nil {
-		return err
-	}
-
-	index, _, err := s.findProjectById(projects, projectId)
-	if err != nil {
-		return err
-	}
-
-	projects = append(projects[:index], projects[index+1:]...)
-
-	return s.baseService.WriteToFile(projects)
-}
-
-func (s *ProjectService) DeleteAllProjects() error {
-	return s.baseService.DeleteAllItems()
-}
-
 func (s *ProjectService) UpdateTotalSpentTime(id int, spentTime int) error {
 	projects := []Project{}
 	err := s.baseService.ReadFromFile(&projects)
@@ -168,7 +101,7 @@ func (s *ProjectService) UpdateTotalSpentTime(id int, spentTime int) error {
 		return err
 	}
 
-	index, project, err := s.findProjectById(projects, id)
+	index, project, err := s.baseService.FindItemById(projects, id)
 	if err != nil {
 		return err
 	}
@@ -203,9 +136,10 @@ func (s *ProjectService) ListProjects(statusFilter status.ItemStatus) error {
 	for _, project := range projects {
 		if statusFilter == -1 || project.Status == statusFilter {
 			createdAt := project.CreatedAt.Format(constants.DATE_FORMAT)
+			updatedAt := project.UpdatedAt.Format(constants.DATE_FORMAT)
 			totalSpentTimeOfAllTasks := helpers.FormatSpendTime(project.TotalSpentTimeOfAllTasks)
 
-			s.table.Append([]string{strconv.Itoa(project.Id), project.Name, project.Status.String(), createdAt, totalSpentTimeOfAllTasks})
+			s.table.Append([]string{strconv.Itoa(project.Id), project.Name, project.Status.String(), createdAt, updatedAt, totalSpentTimeOfAllTasks})
 			if project.Status == status.TODO {
 				nbOfLeftprojects++
 			}
@@ -213,14 +147,15 @@ func (s *ProjectService) ListProjects(statusFilter status.ItemStatus) error {
 	}
 
 	s.table.SetRowLine(true)
-	s.table.SetFooter([]string{"", "", "", " ", defineFooterText(nbOfLeftprojects, len(projects))})
+	s.table.SetFooter([]string{"", "", "", "", " ", defineFooterText(nbOfLeftprojects, len(projects))})
 	s.table.SetHeaderColor(tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
+		tablewriter.Colors{tablewriter.Bold},
 	)
-	s.table.SetFooterColor(tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold})
+	s.table.SetFooterColor(tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold})
 
 	s.table.Render()
 

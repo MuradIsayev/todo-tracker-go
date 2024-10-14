@@ -50,7 +50,7 @@ func (s *TaskService) UpdateTaskSpentTime(id int, spentTime int) error {
 		return err
 	}
 
-	index, task, err := findTaskById(tasks, id)
+	index, task, err := s.baseService.FindItemById(tasks, id)
 	if err != nil {
 		return err
 	}
@@ -65,15 +65,6 @@ func (s *TaskService) UpdateTaskSpentTime(id int, spentTime int) error {
 	return s.baseService.WriteToFile(tasks)
 }
 
-func findTaskById(tasks []Task, id int) (int, *Task, error) {
-	for i, task := range tasks {
-		if task.Id == id {
-			return i, &task, nil
-		}
-	}
-	return -1, nil, fmt.Errorf("task with ID=%d not found", id)
-}
-
 func (s *TaskService) FindTaskById(id string) (*Task, error) {
 	taskId, err := helpers.ValidateIdAndConvertToInt(id)
 	if err != nil {
@@ -86,7 +77,7 @@ func (s *TaskService) FindTaskById(id string) (*Task, error) {
 		return nil, err
 	}
 
-	_, task, err := findTaskById(tasks, taskId)
+	_, task, err := s.baseService.FindItemById(tasks, taskId)
 	if err != nil {
 		return nil, err
 	}
@@ -95,74 +86,15 @@ func (s *TaskService) FindTaskById(id string) (*Task, error) {
 }
 
 func (s *TaskService) UpdateTaskStatus(id string, taskStatus status.ItemStatus) error {
-	taskId, err := helpers.ValidateIdAndConvertToInt(id)
-	if err != nil {
-		return err
-	}
-
-	tasks := []Task{}
-	err = s.baseService.ReadFromFile(&tasks)
-	if err != nil {
-		return err
-	}
-
-	index, task, err := findTaskById(tasks, taskId)
-	if err != nil {
-		return err
-	}
-
-	task.Status = taskStatus
-	task.UpdatedAt = time.Now()
-	tasks[index] = *task
-
-	return s.baseService.WriteToFile(tasks)
+	return s.baseService.UpdateItemStatus(id, taskStatus)
 }
 
 func (s *TaskService) UpdateTaskName(id, name string) error {
-	taskId, err := helpers.ValidateIdAndConvertToInt(id)
-	if err != nil {
-		return err
-	}
-
-	tasks := []Task{}
-	err = s.baseService.ReadFromFile(&tasks)
-	if err != nil {
-		return err
-	}
-
-	index, task, err := findTaskById(tasks, taskId)
-	if err != nil {
-		return err
-	}
-
-	if name != "" {
-		task.Name = name
-		task.UpdatedAt = time.Now()
-		tasks[index] = *task
-	}
-	return s.baseService.WriteToFile(tasks)
+	return s.baseService.UpdateItemName(id, name)
 }
 
 func (s *TaskService) DeleteTask(id string) error {
-	taskId, err := helpers.ValidateIdAndConvertToInt(id)
-	if err != nil {
-		return err
-	}
-
-	tasks := []Task{}
-	err = s.baseService.ReadFromFile(&tasks)
-	if err != nil {
-		return err
-	}
-
-	index, _, err := findTaskById(tasks, taskId)
-	if err != nil {
-		return err
-	}
-
-	tasks = append(tasks[:index], tasks[index+1:]...)
-
-	return s.baseService.WriteToFile(tasks)
+	return s.baseService.DeleteItem(id)
 }
 
 func (s *TaskService) DeleteAllTasks() error {

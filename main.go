@@ -2,7 +2,7 @@ package main
 
 /*
 
-TODO: Reduce the repetition in the code by creating helper functions and using struct embedding more effectively.
+TODO: Delete the tasks file when the project is deleted.
 TODO: Think of how to improve error handling.
 TODO: Add more features like sorting, filtering, and searching.
 TODO: Make it more user friendly for the production step.
