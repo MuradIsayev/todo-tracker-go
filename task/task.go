@@ -23,46 +23,62 @@ type Task struct {
 	ProjectId      int               `json:"projectId"`
 }
 
+type TaskManager interface {
+	DeleteTasksByProjectId(projectId string) error
+	DeleteAllTasks() error
+	UpdateTaskTimer(taskId int, newDuration int) error
+}
+
+func (s *TaskService) DeleteAllTasks() error {
+	return helpers.RemoveContentsOfDirectory("output/tasks")
+}
+
+func (t *TaskService) DeleteTasksByProjectId(projectId string) error {
+	filePathOfTask := fmt.Sprintf("output/tasks/%s_%s", projectId, constants.TASK_FILE_NAME)
+
+	return helpers.RemoveFileByFilePath(filePathOfTask)
+}
+
+func (t *TaskService) UpdateTaskTimer(taskId int, newDuration int) error {
+	return t.baseService.UpdateTotalSpentTime(taskId, newDuration)
+}
+
 type TaskService struct {
 	baseService    *base.BaseService[Task]
 	table          *tablewriter.Table
 	projectService *project.ProjectService
 }
 
-func NewTaskService(projectService *project.ProjectService, projectId string, table *tablewriter.Table) *TaskService {
-	filePath := fmt.Sprintf("output/tasks/%s_%s", projectId, constants.TASK_FILE_NAME)
-
+func NewTaskService(projectService *project.ProjectService, table *tablewriter.Table) *TaskService {
 	table.SetHeader([]string{constants.COLUMN_ID, constants.COLUMN_NAME, constants.COLUMN_STATUS, constants.COLUMN_CREATE_DATE, constants.COLUMN_UPDATE_DATE, constants.COLUMN_TOTAL_SPENT_TIME_TASK})
 
 	return &TaskService{
 		table:          table,
 		projectService: projectService,
-		baseService: &base.BaseService[Task]{
-			FilePath: filePath,
-		},
 	}
 }
 
+func (s *TaskService) AddProjectIdToTaskService(projectId string) *TaskService {
+	filePath := fmt.Sprintf("output/tasks/%s_%s", projectId, constants.TASK_FILE_NAME)
+
+	s.baseService = &base.BaseService[Task]{
+		FilePath: filePath,
+	}
+
+	return s
+
+}
+
 func (s *TaskService) UpdateTaskSpentTime(id int, spentTime int) error {
-	tasks := []Task{}
-	err := s.baseService.ReadFromFile(&tasks)
+	// find task by id
+	task, err := s.FindTaskById(strconv.Itoa(id))
 	if err != nil {
 		return err
 	}
 
-	index, task, err := s.baseService.FindItemById(tasks, id)
-	if err != nil {
-		return err
-	}
+	s.projectService.UpdateProjectSpentTime(task.ProjectId, spentTime)
 
-	s.projectService.UpdateTotalSpentTime(task.ProjectId, spentTime)
-	task.TotalSpentTime += spentTime
-	if task.Status != status.DONE && task.TotalSpentTime > 0 && task.Status != status.IN_PROGRESS {
-		task.Status = status.IN_PROGRESS
-	}
-
-	tasks[index] = *task
-	return s.baseService.WriteToFile(tasks)
+	return s.baseService.UpdateTotalSpentTime(id, spentTime)
 }
 
 func (s *TaskService) FindTaskById(id string) (*Task, error) {
@@ -95,10 +111,6 @@ func (s *TaskService) UpdateTaskName(id, name string) error {
 
 func (s *TaskService) DeleteTask(id string) error {
 	return s.baseService.DeleteItem(id)
-}
-
-func (s *TaskService) DeleteAllTasks() error {
-	return s.baseService.DeleteAllItems()
 }
 
 func defineTableFooterText(nbOfLeftTasks, nbOfTotalTasks int) string {

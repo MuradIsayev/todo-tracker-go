@@ -13,12 +13,30 @@ import (
 )
 
 type Project struct {
-	Id                       int               `json:"id"`
-	Name                     string            `json:"name"`
-	Status                   status.ItemStatus `json:"status"`
-	CreatedAt                time.Time         `json:"createdAt"`
-	UpdatedAt                time.Time         `json:"updatedAt"`
-	TotalSpentTimeOfAllTasks int               `json:"totalSpentTime"`
+	Id             int               `json:"id"`
+	Name           string            `json:"name"`
+	Status         status.ItemStatus `json:"status"`
+	CreatedAt      time.Time         `json:"createdAt"`
+	UpdatedAt      time.Time         `json:"updatedAt"`
+	TotalSpentTime int               `json:"totalSpentTime"`
+}
+
+type ProjectManager interface {
+	DeleteAllProjects() error
+	DeleteProjectById(projectId string) error
+	UpdateProjectTimer(projectId int, newDuration int) error
+}
+
+func (p *ProjectService) DeleteAllProjects() error {
+	return p.baseService.DeleteAllItems()
+}
+
+func (p *ProjectService) DeleteProjectById(projectId string) error {
+	return p.baseService.DeleteItem(projectId)
+}
+
+func (p *ProjectService) UpdateProjectTimer(projectId int, newDuration int) error {
+	return p.baseService.UpdateTotalSpentTime(projectId, newDuration)
 }
 
 type ProjectService struct {
@@ -43,14 +61,6 @@ func (s *ProjectService) UpdateProjectStatus(id string, projectStatus status.Ite
 
 func (s *ProjectService) UpdateProjectName(id, name string) error {
 	return s.baseService.UpdateItemName(id, name)
-}
-
-func (s *ProjectService) DeleteProject(id string) error {
-	return s.baseService.DeleteItem(id)
-}
-
-func (s *ProjectService) DeleteAllProjects() error {
-	return s.baseService.DeleteAllItems()
 }
 
 func (s *ProjectService) CreateProject(name string) error {
@@ -94,26 +104,8 @@ func (s *ProjectService) IsProjectExists(id string) bool {
 	return false
 }
 
-func (s *ProjectService) UpdateTotalSpentTime(id int, spentTime int) error {
-	projects := []Project{}
-	err := s.baseService.ReadFromFile(&projects)
-	if err != nil {
-		return err
-	}
-
-	index, project, err := s.baseService.FindItemById(projects, id)
-	if err != nil {
-		return err
-	}
-
-	project.TotalSpentTimeOfAllTasks += spentTime
-
-	if project.Status != status.DONE && project.TotalSpentTimeOfAllTasks > 0 && project.Status != status.IN_PROGRESS {
-		project.Status = status.IN_PROGRESS
-	}
-	projects[index] = *project
-
-	return s.baseService.WriteToFile(projects)
+func (s *ProjectService) UpdateProjectSpentTime(id int, spentTime int) error {
+	return s.baseService.UpdateTotalSpentTime(id, spentTime)
 }
 
 func defineFooterText(nbOfLeftProjects, nbOfTotalProjects int) string {
@@ -137,9 +129,9 @@ func (s *ProjectService) ListProjects(statusFilter status.ItemStatus) error {
 		if statusFilter == -1 || project.Status == statusFilter {
 			createdAt := project.CreatedAt.Format(constants.DATE_FORMAT)
 			updatedAt := project.UpdatedAt.Format(constants.DATE_FORMAT)
-			totalSpentTimeOfAllTasks := helpers.FormatSpendTime(project.TotalSpentTimeOfAllTasks)
+			totalSpentTime := helpers.FormatSpendTime(project.TotalSpentTime)
 
-			s.table.Append([]string{strconv.Itoa(project.Id), project.Name, project.Status.String(), createdAt, updatedAt, totalSpentTimeOfAllTasks})
+			s.table.Append([]string{strconv.Itoa(project.Id), project.Name, project.Status.String(), createdAt, updatedAt, totalSpentTime})
 			if project.Status == status.TODO {
 				nbOfLeftprojects++
 			}

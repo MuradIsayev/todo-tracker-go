@@ -2,11 +2,9 @@ package main
 
 /*
 
-TODO: Delete the tasks file when the project is deleted.
 TODO: Think of how to improve error handling.
 TODO: Add more features like sorting, filtering, and searching.
 TODO: Make it more user friendly for the production step.
-TODO: Maybee add unit tests?
 FIX: Fix the issue with the command line input not working properly when the timer is done.
 */
 
@@ -21,17 +19,22 @@ import (
 	"github.com/MuradIsayev/todo-tracker/constants"
 	"github.com/MuradIsayev/todo-tracker/countdown"
 	"github.com/MuradIsayev/todo-tracker/project"
+	"github.com/MuradIsayev/todo-tracker/service"
 	"github.com/MuradIsayev/todo-tracker/status"
 	"github.com/MuradIsayev/todo-tracker/task"
 	"github.com/olekukonko/tablewriter"
 )
 
-func startREPL(projectService *project.ProjectService, projectID string) {
+func startREPL(
+	circularDependencyManager *service.Manager,
+	projectId string,
+	taskService *task.TaskService,
+) {
 	fmt.Println("Welcome to the Task Management CLI - Interactive Mode")
 	reader := bufio.NewReader(os.Stdin)
 
-	taskTable := tablewriter.NewWriter(os.Stdout)
-	taskService := task.NewTaskService(projectService, projectID, taskTable)
+	// add projectID to the task service
+	taskService.AddProjectIdToTaskService(projectId)
 
 	for {
 		fmt.Print(">>> ")
@@ -42,12 +45,12 @@ func startREPL(projectService *project.ProjectService, projectID string) {
 			break
 		}
 
-		executeCommand(input, projectID, taskService)
+		executeCommand(input, projectId, taskService, circularDependencyManager)
 	}
 
 }
 
-func executeCommand(input string, projectID string, taskService *task.TaskService) {
+func executeCommand(input string, projectId string, taskService *task.TaskService, circularDependencyManager *service.Manager) {
 	parts := strings.Fields(input)
 	if len(parts) == 0 {
 		return
@@ -58,7 +61,7 @@ func executeCommand(input string, projectID string, taskService *task.TaskServic
 
 	switch command {
 	case constants.ADD:
-		handleAddCommand(args, projectID, taskService)
+		handleAddCommand(args, projectId, taskService)
 	case constants.LIST:
 		handleListCommand(args, taskService)
 	case constants.UPDATE:
@@ -68,13 +71,13 @@ func executeCommand(input string, projectID string, taskService *task.TaskServic
 	case constants.MARK:
 		handleMarkCommand(args, taskService)
 	case constants.TIMER:
-		handleCountdownCommand(args, taskService)
+		handleCountdownCommand(args, taskService, circularDependencyManager)
 	default:
 		fmt.Println("Unknown command:", command)
 	}
 }
 
-func handleCountdownCommand(args []string, taskService *task.TaskService) {
+func handleCountdownCommand(args []string, taskService *task.TaskService, circularDependencyManager *service.Manager) {
 	if len(args) != 3 {
 		fmt.Println("USAGE: t <task_id> --time <duration>")
 		return
@@ -89,7 +92,7 @@ func handleCountdownCommand(args []string, taskService *task.TaskService) {
 	}
 
 	taskID := args[0]
-	countdownService := countdown.NewCountdownService(taskService)
+	countdownService := countdown.NewCountdownService(taskService, circularDependencyManager)
 
 	task, err := taskService.FindTaskById(taskID)
 	if err != nil {
@@ -163,14 +166,14 @@ func printControls() {
 	fmt.Print("\0338")                                                                                              // Restore cursor position
 }
 
-func handleAddCommand(args []string, projectID string, taskService *task.TaskService) {
+func handleAddCommand(args []string, projectId string, taskService *task.TaskService) {
 	if len(args) < 1 {
 		fmt.Println("USAGE: add <task_name>")
 		return
 	}
 
 	taskName := strings.Join(args, " ")
-	if err := taskService.CreateTask(projectID, taskName); err != nil {
+	if err := taskService.CreateTask(projectId, taskName); err != nil {
 		fmt.Println("Error:", err)
 	}
 }
@@ -278,6 +281,11 @@ func main() {
 	projectTable := tablewriter.NewWriter(os.Stdout)
 	projectService := project.NewProjectService(constants.PROJECT_FILE_NAME, projectTable)
 
+	taskTable := tablewriter.NewWriter(os.Stdout)
+	taskService := task.NewTaskService(projectService, taskTable)
+
+	circularDependencyManager := service.NewManager(taskService, projectService)
+
 	if len(os.Args) < 2 {
 		fmt.Println("Expected 'add', 'list', 'update', 'delete', 'mark', or 'repl' commands")
 		os.Exit(1)
@@ -285,7 +293,7 @@ func main() {
 
 	switch os.Args[1] {
 	case constants.REPL:
-		handleREPLCommand(os.Args[2:], projectService)
+		handleREPLCommand(os.Args[2:], projectService, taskService, circularDependencyManager)
 	case constants.ADD:
 		handleProjectAddCommand(os.Args[2:], projectService)
 	case constants.LIST:
@@ -293,7 +301,7 @@ func main() {
 	case constants.UPDATE:
 		handleProjectUpdateCommand(os.Args[2:], projectService)
 	case constants.DELETE:
-		handleProjectDeleteCommand(os.Args[2:], projectService)
+		handleProjectDeleteCommand(os.Args[2:], circularDependencyManager)
 	case constants.MARK:
 		handleProjectMarkCommand(os.Args[2:], projectService)
 	default:
@@ -302,7 +310,7 @@ func main() {
 	}
 }
 
-func handleREPLCommand(args []string, projectService *project.ProjectService) {
+func handleREPLCommand(args []string, projectService *project.ProjectService, taskService *task.TaskService, circularDependencyManager *service.Manager) {
 	if len(args) != 1 {
 		fmt.Println("USAGE: repl <project_id>")
 		return
@@ -314,7 +322,12 @@ func handleREPLCommand(args []string, projectService *project.ProjectService) {
 		os.Exit(1)
 	}
 
-	startREPL(projectService, projectID)
+	startREPL(
+		// projectService,
+		circularDependencyManager,
+		projectID,
+		taskService,
+	)
 }
 
 func handleProjectAddCommand(args []string, projectService *project.ProjectService) {
@@ -366,15 +379,27 @@ func handleProjectUpdateCommand(args []string, projectService *project.ProjectSe
 	}
 }
 
-func handleProjectDeleteCommand(args []string, projectService *project.ProjectService) {
+func handleProjectDeleteCommand(args []string, circularDependencyManager *service.Manager) {
 	deleteCommand := flag.NewFlagSet(constants.DELETE, flag.ExitOnError)
 	deleteAll := deleteCommand.Bool("all", false, "Delete all projects")
 	deleteCommand.Parse(args)
 
 	if *deleteAll {
-		if err := projectService.DeleteAllProjects(); err != nil {
+		fmt.Println("Are you sure you want to delete all projects? This action will also delete all tasks. (y/n)")
+		reader := bufio.NewReader(os.Stdin)
+
+		response, _ := reader.ReadString('\n')
+		response = strings.TrimSpace(response)
+
+		if response != "y" {
+			fmt.Println("Command cancelled.")
+			return
+		}
+
+		if err := circularDependencyManager.DeleteAllProjectWithAllTasks(); err != nil {
 			fmt.Println("Error:", err)
 		}
+
 		return
 	}
 
@@ -383,7 +408,7 @@ func handleProjectDeleteCommand(args []string, projectService *project.ProjectSe
 		return
 	}
 
-	if err := projectService.DeleteProject(deleteCommand.Args()[0]); err != nil {
+	if err := circularDependencyManager.DeleteProjectAndCorrespondingTasks(deleteCommand.Args()[0]); err != nil {
 		fmt.Println("Error:", err)
 	}
 }

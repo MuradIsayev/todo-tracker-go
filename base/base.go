@@ -153,3 +153,29 @@ func (s *BaseService[T]) UpdateItemStatus(id string, itemStatus status.ItemStatu
 
 	return s.WriteToFile(items)
 }
+
+func (s *BaseService[T]) UpdateTotalSpentTime(id int, spentTime int) error {
+	items := []T{}
+	err := s.ReadFromFile(&items)
+	if err != nil {
+		return err
+	}
+
+	index, item, err := s.FindItemById(items, id)
+	if err != nil {
+		return err
+	}
+
+	v := reflect.ValueOf(item).Elem().FieldByName("TotalSpentTime")
+	v.SetInt(int64(spentTime) + v.Int())
+
+	itemStatus := reflect.ValueOf(item).Elem().FieldByName("Status").Interface().(status.ItemStatus)
+	if itemStatus == status.TODO {
+		v = reflect.ValueOf(item).Elem().FieldByName("Status")
+		v.Set(reflect.ValueOf(status.IN_PROGRESS))
+	}
+
+	items[index] = *item
+
+	return s.WriteToFile(items)
+}
