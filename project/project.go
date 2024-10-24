@@ -19,24 +19,7 @@ type Project struct {
 	CreatedAt      time.Time         `json:"createdAt"`
 	UpdatedAt      time.Time         `json:"updatedAt"`
 	TotalSpentTime int               `json:"totalSpentTime"`
-}
-
-type ProjectManager interface {
-	DeleteAllProjects() error
-	DeleteProjectById(projectId string) error
-	UpdateProjectTimer(projectId int, newDuration int) error
-}
-
-func (p *ProjectService) DeleteAllProjects() error {
-	return p.baseService.DeleteAllItems()
-}
-
-func (p *ProjectService) DeleteProjectById(projectId string) error {
-	return p.baseService.DeleteItem(projectId)
-}
-
-func (p *ProjectService) UpdateProjectTimer(projectId int, newDuration int) error {
-	return p.baseService.UpdateTotalSpentTime(projectId, newDuration)
+	NbOfTotalTasks int               `json:"nbOfTotalTasks"`
 }
 
 type ProjectService struct {
@@ -45,7 +28,7 @@ type ProjectService struct {
 }
 
 func NewProjectService(filePath string, table *tablewriter.Table) *ProjectService {
-	table.SetHeader([]string{constants.COLUMN_ID, constants.COLUMN_NAME, constants.COLUMN_STATUS, constants.COLUMN_CREATE_DATE, constants.COLUMN_UPDATE_DATE, constants.COLUMN_TOTAL_SPENT_TIME})
+	table.SetHeader([]string{constants.COLUMN_ID, constants.COLUMN_NAME, constants.COLUMN_STATUS, constants.COLUMN_CREATE_DATE, constants.COLUMN_UPDATE_DATE, constants.COLUMN_TOTAL_SPENT_TIME, constants.COLUMN_TOTAL_TASKS})
 
 	return &ProjectService{
 		table: table,
@@ -55,12 +38,54 @@ func NewProjectService(filePath string, table *tablewriter.Table) *ProjectServic
 	}
 }
 
+type ProjectManager interface {
+	DeleteAllProjects() error
+	DeleteProjectById(projectId string) error
+	UpdateProjectTimer(projectId int, newDuration int) error
+}
+
+func (p *ProjectService) DeleteAllProjects() error {
+	if err := p.baseService.DeleteAllItems(); err != nil {
+		return err
+	}
+
+	fmt.Println("Projects deleted successfully")
+
+	return nil
+}
+
+func (p *ProjectService) DeleteProjectById(projectId string) error {
+	if err := p.baseService.DeleteItemById(projectId); err != nil {
+		return err
+	}
+
+	fmt.Println("Project deleted successfully")
+
+	return nil
+}
+
+func (p *ProjectService) UpdateProjectTimer(projectId int, newDuration int) error {
+	return p.baseService.UpdateTotalSpentTime(projectId, newDuration)
+}
+
 func (s *ProjectService) UpdateProjectStatus(id string, projectStatus status.ItemStatus) error {
-	return s.baseService.UpdateItemStatus(id, projectStatus)
+	if err := s.baseService.UpdateItemStatus(id, projectStatus); err != nil {
+		return err
+	}
+
+	fmt.Println("Project status updated successfully")
+
+	return nil
 }
 
 func (s *ProjectService) UpdateProjectName(id, name string) error {
-	return s.baseService.UpdateItemName(id, name)
+	if err := s.baseService.UpdateItemName(id, name); err != nil {
+		return err
+	}
+
+	fmt.Println("Project name updated successfully")
+
+	return nil
 }
 
 func (s *ProjectService) CreateProject(name string) error {
@@ -80,32 +105,68 @@ func (s *ProjectService) CreateProject(name string) error {
 
 	projects = append(projects, project)
 
-	return s.baseService.WriteToFile(projects)
+	if err := s.baseService.WriteToFile(projects); err != nil {
+		return err
+	}
+
+	fmt.Println("Project created successfully")
+
+	return nil
 }
 
-func (s *ProjectService) IsProjectExists(id string) bool {
+func (s *ProjectService) UpdateTotalTasksOfProject(id string, nbOfTotalTasks int) error {
+	projects := []Project{}
+	err := s.baseService.ReadFromFile(&projects)
+	if err != nil {
+		return err
+	}
+
 	projectId, err := helpers.ValidateIdAndConvertToInt(id)
 	if err != nil {
-		return false
+		return err
+	}
+
+	index, project, err := s.baseService.FindItemById(projects, projectId)
+	if err != nil {
+		return err
+	}
+
+	project.NbOfTotalTasks = nbOfTotalTasks
+	projects[index] = *project
+
+	if err := s.baseService.WriteToFile(projects); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *ProjectService) FindProjectNameById(id string) string {
+	projectId, err := helpers.ValidateIdAndConvertToInt(id)
+	if err != nil {
+		return ""
 	}
 
 	projects := []Project{}
 	err = s.baseService.ReadFromFile(&projects)
 	if err != nil {
-		return false
+		return ""
 	}
 
-	for _, project := range projects {
-		if project.Id == projectId {
-			return true
-		}
+	_, project, err := s.baseService.FindItemById(projects, projectId)
+	if err != nil {
+		return ""
 	}
 
-	return false
+	return project.Name
 }
 
 func (s *ProjectService) UpdateProjectSpentTime(id int, spentTime int) error {
-	return s.baseService.UpdateTotalSpentTime(id, spentTime)
+	if err := s.baseService.UpdateTotalSpentTime(id, spentTime); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func defineFooterText(nbOfLeftProjects, nbOfTotalProjects int) string {
@@ -131,7 +192,7 @@ func (s *ProjectService) ListProjects(statusFilter status.ItemStatus) error {
 			updatedAt := project.UpdatedAt.Format(constants.DATE_FORMAT)
 			totalSpentTime := helpers.FormatSpendTime(project.TotalSpentTime)
 
-			s.table.Append([]string{strconv.Itoa(project.Id), project.Name, project.Status.String(), createdAt, updatedAt, totalSpentTime})
+			s.table.Append([]string{strconv.Itoa(project.Id), project.Name, project.Status.String(), createdAt, updatedAt, totalSpentTime, strconv.Itoa(project.NbOfTotalTasks)})
 			if project.Status == status.TODO {
 				nbOfLeftprojects++
 			}
@@ -139,15 +200,16 @@ func (s *ProjectService) ListProjects(statusFilter status.ItemStatus) error {
 	}
 
 	s.table.SetRowLine(true)
-	s.table.SetFooter([]string{"", "", "", "", " ", defineFooterText(nbOfLeftprojects, len(projects))})
+	s.table.SetFooter([]string{"", "", "", "", "", " ", defineFooterText(nbOfLeftprojects, len(projects))})
 	s.table.SetHeaderColor(tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
+		tablewriter.Colors{tablewriter.Bold},
 	)
-	s.table.SetFooterColor(tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold})
+	s.table.SetFooterColor(tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold})
 
 	s.table.Render()
 

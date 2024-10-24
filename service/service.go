@@ -25,8 +25,8 @@ func (m *Manager) DeleteProjectAndCorrespondingTasks(projectId string) error {
 	return m.ProjectService.DeleteProjectById(projectId)
 }
 
-func (m *Manager) DeleteAllProjectWithAllTasks() error {
-	if err := m.TaskService.DeleteAllTasks(); err != nil {
+func (m *Manager) DeleteAllProjectsWithAllTasks(projectId string, shouldAlterTasksCounter bool) error {
+	if err := m.TaskService.DeleteAllTasks(projectId, shouldAlterTasksCounter); err != nil {
 		return err
 	}
 
@@ -40,3 +40,7 @@ func (m *Manager) UpdateTaskAndProjectTimers(taskId, projectId int, newDuration 
 
 	return m.ProjectService.UpdateProjectTimer(projectId, newDuration)
 }
+
+// func (m *Manager) CreateTask(projectID string, name string) error {
+// 	return m.TaskService.CreateTask(projectID, name)
+// }

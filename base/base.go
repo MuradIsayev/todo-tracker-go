@@ -41,6 +41,7 @@ func (s *BaseService[T]) WriteToFile(data []T) error {
 	if err := os.WriteFile(s.FilePath, jsonData, 0644); err != nil {
 		return fmt.Errorf("cannot write to file: %v", err)
 	}
+
 	return nil
 }
 
@@ -104,7 +105,7 @@ func (s *BaseService[T]) UpdateItemName(id, name string) error {
 	return s.WriteToFile(items)
 }
 
-func (s *BaseService[T]) DeleteItem(id string) error {
+func (s *BaseService[T]) DeleteItemById(id string) error {
 	itemId, err := helpers.ValidateIdAndConvertToInt(id)
 	if err != nil {
 		return err

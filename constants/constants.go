@@ -8,16 +8,17 @@ const (
 	MARK   string = "mark"
 	REPL   string = "repl"
 	TIMER  string = "t"
+	HELP   string = "help"
 )
 
 const (
-	COLUMN_ID                    = "ID"
-	COLUMN_NAME                  = "Name"
-	COLUMN_STATUS                = "Status"
-	COLUMN_CREATE_DATE           = "Create Date"
-	COLUMN_UPDATE_DATE           = "Update Date"
-	COLUMN_TOTAL_SPENT_TIME      = "Total Spent Time"
-	COLUMN_TOTAL_SPENT_TIME_TASK = "Total Spent Time"
+	COLUMN_ID               = "ID"
+	COLUMN_NAME             = "Name"
+	COLUMN_STATUS           = "Status"
+	COLUMN_CREATE_DATE      = "Create Date"
+	COLUMN_UPDATE_DATE      = "Update Date"
+	COLUMN_TOTAL_SPENT_TIME = "Total Spent Time"
+	COLUMN_TOTAL_TASKS      = "Total Tasks"
 )
 
 const DATE_FORMAT = "2006-01-02 15:04:05"
