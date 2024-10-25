@@ -11,10 +11,12 @@ import (
 	"github.com/MuradIsayev/todo-tracker/status"
 )
 
+// BaseService is a base service for all services (ProjectService, TaskService)
 type BaseService[T any] struct {
 	FilePath string
 }
 
+// Reads the data from the file
 func (s *BaseService[T]) ReadFromFile(data *[]T) error {
 	fileContent, err := os.ReadFile(s.FilePath)
 	if err != nil {
@@ -32,6 +34,7 @@ func (s *BaseService[T]) ReadFromFile(data *[]T) error {
 	return nil
 }
 
+// Writes the data to the file
 func (s *BaseService[T]) WriteToFile(data []T) error {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
@@ -45,6 +48,7 @@ func (s *BaseService[T]) WriteToFile(data []T) error {
 	return nil
 }
 
+// Gets the next ID for the item (Project or Task)
 func (s *BaseService[T]) GetNextID(items []T) int {
 	v := reflect.ValueOf(items)
 	if v.Kind() == reflect.Slice && v.Len() > 0 {
@@ -55,12 +59,14 @@ func (s *BaseService[T]) GetNextID(items []T) int {
 	return 1
 }
 
+// Deletes all items (Projects or Tasks)
 func (s *BaseService[T]) DeleteAllItems() error {
 	var items []T
 
 	return s.WriteToFile(items)
 }
 
+// Finds the item (Project or Task) by ID
 func (s *BaseService[T]) FindItemById(items []T, id int) (int, *T, error) {
 	for i, item := range items {
 		v := reflect.ValueOf(item)
@@ -75,6 +81,7 @@ func (s *BaseService[T]) FindItemById(items []T, id int) (int, *T, error) {
 	return -1, nil, fmt.Errorf("item with ID=%d not found", id)
 }
 
+// Updates the name of the item (Project or Task) by ID
 func (s *BaseService[T]) UpdateItemName(id, name string) error {
 	itemId, err := helpers.ValidateIdAndConvertToInt(id)
 	if err != nil {
@@ -105,6 +112,7 @@ func (s *BaseService[T]) UpdateItemName(id, name string) error {
 	return s.WriteToFile(items)
 }
 
+// Deletes the item (Project or Task) by ID
 func (s *BaseService[T]) DeleteItemById(id string) error {
 	itemId, err := helpers.ValidateIdAndConvertToInt(id)
 	if err != nil {
@@ -127,6 +135,7 @@ func (s *BaseService[T]) DeleteItemById(id string) error {
 	return s.WriteToFile(items)
 }
 
+// Updates the status of the item (Project or Task)
 func (s *BaseService[T]) UpdateItemStatus(id string, itemStatus status.ItemStatus) error {
 	taskId, err := helpers.ValidateIdAndConvertToInt(id)
 	if err != nil {
@@ -155,6 +164,7 @@ func (s *BaseService[T]) UpdateItemStatus(id string, itemStatus status.ItemStatu
 	return s.WriteToFile(items)
 }
 
+// Updates the total focus time of the item (Project or Task)
 func (s *BaseService[T]) UpdateTotalSpentTime(id int, spentTime int) error {
 	items := []T{}
 	err := s.ReadFromFile(&items)

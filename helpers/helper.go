@@ -9,6 +9,7 @@ import (
 	"strconv"
 )
 
+// Validates the ID and converts it to an integer
 func ValidateIdAndConvertToInt(id string) (int, error) {
 	var numberRegex = regexp.MustCompile(`^[0-9]+$`)
 
@@ -19,6 +20,7 @@ func ValidateIdAndConvertToInt(id string) (int, error) {
 	return strconv.Atoi(id)
 }
 
+// Removes a file by its file path
 func RemoveFileByFilePath(filePath string) error {
 	err := os.Remove(filePath)
 	if err != nil {
@@ -28,6 +30,16 @@ func RemoveFileByFilePath(filePath string) error {
 	return nil
 }
 
+// Checks if a file exists
+func DoesFileExist(filePath string) bool {
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return false
+	}
+
+	return true
+}
+
+// Removes all files in a directory
 func RemoveContentsOfDirectory(dir string) error {
 	d, err := os.Open(dir)
 	if err != nil {
@@ -47,6 +59,7 @@ func RemoveContentsOfDirectory(dir string) error {
 	return nil
 }
 
+// Formats the total spent time in hours, minutes, and seconds
 func FormatSpendTime(totalSpentTime int) string {
 	formattedSpendTime := ""
 

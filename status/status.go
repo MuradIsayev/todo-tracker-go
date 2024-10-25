@@ -1,5 +1,6 @@
 package status
 
+// Describes the status of an item
 type ItemStatus int
 
 const (
@@ -8,6 +9,7 @@ const (
 	DONE
 )
 
+// Returns the string representation of the ItemStatus
 func (itemStatus ItemStatus) String() string {
 	switch itemStatus {
 	case TODO:

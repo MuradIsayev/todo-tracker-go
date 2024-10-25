@@ -28,7 +28,7 @@ type ProjectService struct {
 }
 
 func NewProjectService(filePath string, table *tablewriter.Table) *ProjectService {
-	table.SetHeader([]string{constants.COLUMN_ID, constants.COLUMN_NAME, constants.COLUMN_STATUS, constants.COLUMN_CREATE_DATE, constants.COLUMN_UPDATE_DATE, constants.COLUMN_TOTAL_SPENT_TIME, constants.COLUMN_TOTAL_TASKS})
+	table.SetHeader([]string{constants.COLUMN_ID, constants.COLUMN_NAME, constants.COLUMN_STATUS, constants.COLUMN_CREATE_DATE, constants.COLUMN_UPDATE_DATE, constants.COLUMN_TOTAL_SPENT_TIME, constants.COLUMN_TOTAL_TASKS, ""})
 
 	return &ProjectService{
 		table: table,
@@ -192,7 +192,7 @@ func (s *ProjectService) ListProjects(statusFilter status.ItemStatus) error {
 			updatedAt := project.UpdatedAt.Format(constants.DATE_FORMAT)
 			totalSpentTime := helpers.FormatSpendTime(project.TotalSpentTime)
 
-			s.table.Append([]string{strconv.Itoa(project.Id), project.Name, project.Status.String(), createdAt, updatedAt, totalSpentTime, strconv.Itoa(project.NbOfTotalTasks)})
+			s.table.Append([]string{strconv.Itoa(project.Id), project.Name, project.Status.String(), createdAt, updatedAt, totalSpentTime, strconv.Itoa(project.NbOfTotalTasks), ""})
 			if project.Status == status.TODO {
 				nbOfLeftprojects++
 			}
@@ -200,7 +200,7 @@ func (s *ProjectService) ListProjects(statusFilter status.ItemStatus) error {
 	}
 
 	s.table.SetRowLine(true)
-	s.table.SetFooter([]string{"", "", "", "", "", " ", defineFooterText(nbOfLeftprojects, len(projects))})
+	s.table.SetFooter([]string{"", "", "", "", "", "", " ", defineFooterText(nbOfLeftprojects, len(projects))})
 	s.table.SetHeaderColor(tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
@@ -208,8 +208,9 @@ func (s *ProjectService) ListProjects(statusFilter status.ItemStatus) error {
 		tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
+		tablewriter.Colors{tablewriter.Bold},
 	)
-	s.table.SetFooterColor(tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold})
+	s.table.SetFooterColor(tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold})
 
 	s.table.Render()
 

@@ -32,6 +32,7 @@ func NewCountdownService(taskService *task.TaskService, circularDependencyManage
 	}
 }
 
+// Starts the countdown for the task and sends the remaining time to the display channel
 func (cs *CountdownService) StartCountdown(task *task.Task, countdownMinutes int) {
 	remainingSeconds := countdownMinutes * 60
 

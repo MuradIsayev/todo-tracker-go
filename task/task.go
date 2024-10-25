@@ -30,7 +30,7 @@ type TaskService struct {
 }
 
 func NewTaskService(projectService *project.ProjectService, table *tablewriter.Table) *TaskService {
-	table.SetHeader([]string{constants.COLUMN_ID, constants.COLUMN_NAME, constants.COLUMN_STATUS, constants.COLUMN_CREATE_DATE, constants.COLUMN_UPDATE_DATE, constants.COLUMN_TOTAL_SPENT_TIME})
+	table.SetHeader([]string{constants.COLUMN_ID, constants.COLUMN_NAME, constants.COLUMN_STATUS, constants.COLUMN_CREATE_DATE, constants.COLUMN_UPDATE_DATE, constants.COLUMN_TOTAL_SPENT_TIME, constants.COLUMN_EMPTY})
 
 	return &TaskService{
 		table:          table,
@@ -63,6 +63,10 @@ func (s *TaskService) DeleteAllTasks(projectId string, shouldAlterTasksCounter b
 func (t *TaskService) DeleteTasksByProjectId(projectId string) error {
 	filePathOfTask := fmt.Sprintf("output/tasks/%s_%s", projectId, constants.TASK_FILE_NAME)
 
+	if fileExists := helpers.DoesFileExist(filePathOfTask); !fileExists {
+		return nil
+	}
+
 	if err := helpers.RemoveFileByFilePath(filePathOfTask); err != nil {
 		return err
 	}
@@ -77,10 +81,10 @@ func (t *TaskService) UpdateTaskTimer(taskId int, newDuration int) error {
 }
 
 func (s *TaskService) AddProjectIdToTaskService(projectId string) *TaskService {
-	filePath := fmt.Sprintf("output/tasks/%s_%s", projectId, constants.TASK_FILE_NAME)
+	filePathOfTask := fmt.Sprintf("output/tasks/%s_%s", projectId, constants.TASK_FILE_NAME)
 
 	s.baseService = &base.BaseService[Task]{
-		FilePath: filePath,
+		FilePath: filePathOfTask,
 	}
 
 	return s
@@ -192,7 +196,7 @@ func (s *TaskService) ListTasks(statusFilter status.ItemStatus) error {
 			createdAt := task.CreatedAt.Format(constants.DATE_FORMAT)
 			updatedAt := task.UpdatedAt.Format(constants.DATE_FORMAT)
 
-			s.table.Append([]string{strconv.Itoa(task.Id), task.Name, task.Status.String(), createdAt, updatedAt, formatSpendTime})
+			s.table.Append([]string{strconv.Itoa(task.Id), task.Name, task.Status.String(), createdAt, updatedAt, formatSpendTime, constants.COLUMN_EMPTY})
 
 			if task.Status == status.TODO {
 				nbOfLeftTasks++
@@ -201,15 +205,16 @@ func (s *TaskService) ListTasks(statusFilter status.ItemStatus) error {
 	}
 
 	s.table.SetRowLine(true)
-	s.table.SetFooter([]string{"", "", "", "", " ", defineTableFooterText(nbOfLeftTasks, len(tasks))})
+	s.table.SetFooter([]string{"", "", "", "", "", " ", defineTableFooterText(nbOfLeftTasks, len(tasks))})
 	s.table.SetHeaderColor(tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
 		tablewriter.Colors{tablewriter.Bold},
+		tablewriter.Colors{tablewriter.Bold},
 	)
-	s.table.SetFooterColor(tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold})
+	s.table.SetFooterColor(tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold}, tablewriter.Colors{tablewriter.Bold})
 
 	s.table.Render()
 

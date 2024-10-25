@@ -1,12 +1,5 @@
 package main
 
-/*
-
-TODO: Think of how to improve error handling.
-TODO: Add more features like sorting, filtering, and searching.
-TODO: Make it more user friendly for the production step.
-*/
-
 import (
 	"bufio"
 	"flag"
@@ -35,7 +28,7 @@ func startREPL(
 
 	reader := bufio.NewReader(os.Stdin)
 
-	// add projectID to the task service
+	// add projectId to the task service
 	taskService.AddProjectIdToTaskService(projectId)
 
 	for {
@@ -327,7 +320,6 @@ func handleREPLCommand(args []string, projectService *project.ProjectService, ta
 	}
 
 	startREPL(
-		// projectService,
 		circularDependencyManager,
 		projectId,
 		projectName,
