@@ -10,6 +10,7 @@ import (
 
 	"github.com/MuradIsayev/todo-tracker/constants"
 	"github.com/MuradIsayev/todo-tracker/countdown"
+	"github.com/MuradIsayev/todo-tracker/helpers"
 	"github.com/MuradIsayev/todo-tracker/project"
 	"github.com/MuradIsayev/todo-tracker/service"
 	"github.com/MuradIsayev/todo-tracker/status"
@@ -24,7 +25,7 @@ func startREPL(
 	taskService *task.TaskService,
 ) {
 	fmt.Println("Welcome to the Task Management CLI for project:", projectName)
-	fmt.Println("Commands: add, list, update, delete, mark, (t)imer, exit/quit")
+	fmt.Println("Commands: add, list, update, delete, mark, (t)imer, exit")
 
 	reader := bufio.NewReader(os.Stdin)
 
@@ -36,7 +37,7 @@ func startREPL(
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input)
 
-		if input == "exit" || input == "quit" {
+		if input == "exit" {
 			break
 		}
 
@@ -68,6 +69,7 @@ func executeCommand(input string, projectId string, taskService *task.TaskServic
 		handleCountdownCommand(args, taskService, circularDependencyManager)
 	default:
 		fmt.Println("Unknown command:", command)
+		fmt.Println("Expected 'add', 'list', 'update', 'delete', 'mark', 't' or 'exit' commands")
 	}
 }
 
@@ -198,12 +200,13 @@ func handleListCommand(args []string, taskService *task.TaskService) {
 }
 
 func handleUpdateCommand(args []string, taskService *task.TaskService) {
-	if len(args) != 2 {
-		fmt.Println("USAGE: update <task_id> \"new task name\"")
+	if len(args) < 2 {
+		fmt.Println("USAGE: update <task_id> <new task name>")
 		return
 	}
 
-	if err := taskService.UpdateTaskName(args[0], args[1]); err != nil {
+	taskName := strings.Join(args[1:], " ")
+	if err := taskService.UpdateTaskName(args[0], taskName); err != nil {
 		fmt.Println("Error:", err)
 	}
 }
@@ -280,9 +283,9 @@ func main() {
 
 	circularDependencyManager := service.NewManager(taskService, projectService)
 
-	if len(os.Args) < 2 {
-		fmt.Println("Expected 'add', 'list', 'update', 'delete', 'mark', or 'repl' commands")
-		os.Exit(1)
+	if len(os.Args) == 1 {
+		helpers.DisplayHelp()
+		return
 	}
 
 	switch os.Args[1] {
@@ -299,9 +302,10 @@ func main() {
 	case constants.MARK:
 		handleProjectMarkCommand(os.Args[2:], projectService)
 	case constants.HELP:
-		fmt.Println("Commands: add, list, update, delete, mark, repl")
+		helpers.DisplayHelp()
 	default:
 		fmt.Println("Unknown command:", os.Args[1])
+		fmt.Println("Expected 'add', 'list', 'update', 'delete', 'mark', 'help' or 'repl' commands")
 		os.Exit(1)
 	}
 }
@@ -366,12 +370,14 @@ func handleProjectListCommand(args []string, projectService *project.ProjectServ
 }
 
 func handleProjectUpdateCommand(args []string, projectService *project.ProjectService) {
-	if len(args) != 2 {
-		fmt.Println("USAGE: update <project_id> \"new project name\"")
+	if len(args) < 2 {
+		fmt.Println("USAGE: update <project_id> <new project name>")
 		return
 	}
 
-	if err := projectService.UpdateProjectName(args[0], args[1]); err != nil {
+	projectName := strings.Join(args[1:], " ")
+
+	if err := projectService.UpdateProjectName(args[0], projectName); err != nil {
 		fmt.Println("Error:", err)
 	}
 }
