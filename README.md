@@ -6,10 +6,13 @@ Welcome to todo-tracker-go! This project is a CLI-based task management tool wri
 
 ## Screenshots
 
->Projects Table
+_*Projects Table*_
+
 ![Projects Table](https://i.postimg.cc/ZRzmvKCL/image.png "Projects Table")
 &nbsp;
->Tasks Table with controlled timer functionality
+
+_*Tasks Table with controlled timer functionality*_
+
 ![Tasks Table with Coutdown](https://i.postimg.cc/KYtTMfZ3/image.png "Tasks Table with Countdown")
 
 
