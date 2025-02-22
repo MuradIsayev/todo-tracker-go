@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -101,6 +102,11 @@ func FormatSpendTime(totalSpentTime int) string {
 	}
 
 	return formattedSpendTime
+}
+
+func BeepBeep() {
+	cmd := exec.Command("afplay", "/System/Library/Sounds/Glass.aiff") // Change to a different sound if needed
+	cmd.Run()
 }
 
 func DisplayHelp() {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/MuradIsayev/todo-tracker/helpers"
 	"github.com/MuradIsayev/todo-tracker/service"
 	"github.com/MuradIsayev/todo-tracker/task"
 )
@@ -44,6 +45,7 @@ func (cs *CountdownService) StartCountdown(task *task.Task, countdownMinutes int
 		select {
 		case <-cs.StopChan:
 			cs.DisplayChan <- fmt.Sprintf("Countdown stopped early for the task --> \"%s\".", task.Name)
+			helpers.BeepBeep()
 			cs.circularDependencyManager.UpdateTaskAndProjectTimers(task.Id, task.ProjectId, countdownMinutes*60-remainingSeconds) // Save the elapsed time
 			// cs.taskService.UpdateTaskSpentTime(task.Id, countdownMinutes*60-remainingSeconds)                                      // Save the elapsed time
 			close(cs.DoneChan) // Signal that the countdown has ended
@@ -69,6 +71,7 @@ func (cs *CountdownService) StartCountdown(task *task.Task, countdownMinutes int
 	}
 
 	cs.DisplayChan <- fmt.Sprintf("Countdown complete for the task --> \"%s\". Now press (e) to exit", task.Name)
+	helpers.BeepBeep()
 	cs.circularDependencyManager.UpdateTaskAndProjectTimers(task.Id, task.ProjectId, countdownMinutes*60-remainingSeconds) // Save the elapsed time
 	close(cs.DoneChan)                                                                                                     // Signal that the countdown has ended
 }
